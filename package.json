@@ -6,6 +6,7 @@
         "lint": "turbo run lint --log-order grouped",
         "lint:fix": "turbo lint:fix --log-order grouped && pnpm prettier --ignore-unknown --write '{.,!packages}/*'",
         "test": "turbo run test --log-order grouped",
+        "prepare": "pnpm build",
         "publish-packages": "pnpm build && changeset publish"
     },
     "devDependencies": {
