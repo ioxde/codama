@@ -1,8 +1,11 @@
 import {
     accountValueNode,
+    argumentValueNode,
     constantPdaSeedNodeFromBytes,
     instructionAccountNode,
+    instructionArgumentNode,
     instructionNode,
+    numberTypeNode,
     pdaLinkNode,
     pdaNode,
     pdaSeedValueNode,
@@ -329,4 +332,217 @@ test('it returns empty pdas when no PDA accounts exist', () => {
     expect(result.pdas).toEqual([]);
     // Nothing changed on the node at all.
     expect(result).toEqual(program);
+});
+
+test('it deduplicates byte-equivalent PDAs with different variable seed names', () => {
+    const program = makeProgram([
+        instructionNode({
+            accounts: [
+                instructionAccountNode({
+                    defaultValue: pdaValueNode(
+                        pdaNode({
+                            name: 'thing',
+                            seeds: [
+                                constantPdaSeedNodeFromBytes('base58', 'F9bS'),
+                                variablePdaSeedNode('baseMint', publicKeyTypeNode()),
+                                variablePdaSeedNode('quoteMint', publicKeyTypeNode()),
+                            ],
+                        }),
+                        [
+                            pdaSeedValueNode('baseMint', accountValueNode('baseMint')),
+                            pdaSeedValueNode('quoteMint', accountValueNode('quoteMint')),
+                        ],
+                    ),
+                    isSigner: false,
+                    isWritable: false,
+                    name: 'thing',
+                }),
+                instructionAccountNode({ isSigner: false, isWritable: false, name: 'baseMint' }),
+                instructionAccountNode({ isSigner: false, isWritable: false, name: 'quoteMint' }),
+            ],
+            name: 'initThing',
+        }),
+        instructionNode({
+            accounts: [
+                instructionAccountNode({
+                    defaultValue: pdaValueNode(
+                        pdaNode({
+                            name: 'thing',
+                            seeds: [
+                                constantPdaSeedNodeFromBytes('base58', 'F9bS'),
+                                variablePdaSeedNode('tokenMint', publicKeyTypeNode()),
+                                variablePdaSeedNode('rewardMint', publicKeyTypeNode()),
+                            ],
+                        }),
+                        [
+                            pdaSeedValueNode('tokenMint', accountValueNode('tokenMint')),
+                            pdaSeedValueNode('rewardMint', argumentValueNode('rewardMint')),
+                        ],
+                    ),
+                    isSigner: false,
+                    isWritable: false,
+                    name: 'thing',
+                }),
+                instructionAccountNode({ isSigner: false, isWritable: false, name: 'tokenMint' }),
+            ],
+            arguments: [instructionArgumentNode({ name: 'rewardMint', type: publicKeyTypeNode() })],
+            name: 'useThing',
+        }),
+    ]);
+
+    const result = extractPdasFromProgram(program);
+
+    // One canonical PDA, first-encountered seed names win.
+    expect(result.pdas).toHaveLength(1);
+    expect(result.pdas[0].name).toBe('thing');
+    expect(result.pdas[0].seeds[1]).toEqual(variablePdaSeedNode('baseMint', publicKeyTypeNode()));
+    expect(result.pdas[0].seeds[2]).toEqual(variablePdaSeedNode('quoteMint', publicKeyTypeNode()));
+
+    // initThing's bindings already match the canonical PDA — no rewrite.
+    expect(result.instructions[0].accounts[0].defaultValue).toEqual(
+        pdaValueNode(pdaLinkNode('thing'), [
+            pdaSeedValueNode('baseMint', accountValueNode('baseMint')),
+            pdaSeedValueNode('quoteMint', accountValueNode('quoteMint')),
+        ]),
+    );
+
+    // useThing's seed labels are rewritten to match the canonical PDA.
+    expect(result.instructions[1].accounts[0].defaultValue).toEqual(
+        pdaValueNode(pdaLinkNode('thing'), [
+            pdaSeedValueNode('baseMint', accountValueNode('tokenMint')),
+            pdaSeedValueNode('quoteMint', argumentValueNode('rewardMint')),
+        ]),
+    );
+});
+
+test('it deduplicates PDAs with interleaved constant and variable seeds', () => {
+    const program = makeProgram([
+        instructionNode({
+            accounts: [
+                instructionAccountNode({
+                    defaultValue: pdaValueNode(
+                        pdaNode({
+                            name: 'pool',
+                            seeds: [
+                                constantPdaSeedNodeFromBytes('base58', 'F9bS'),
+                                variablePdaSeedNode('mintA', publicKeyTypeNode()),
+                                constantPdaSeedNodeFromBytes('base58', 'AAAA'),
+                                variablePdaSeedNode('mintB', publicKeyTypeNode()),
+                            ],
+                        }),
+                        [
+                            pdaSeedValueNode('mintA', accountValueNode('mintA')),
+                            pdaSeedValueNode('mintB', accountValueNode('mintB')),
+                        ],
+                    ),
+                    isSigner: false,
+                    isWritable: false,
+                    name: 'pool',
+                }),
+                instructionAccountNode({ isSigner: false, isWritable: false, name: 'mintA' }),
+                instructionAccountNode({ isSigner: false, isWritable: false, name: 'mintB' }),
+            ],
+            name: 'createPool',
+        }),
+        instructionNode({
+            accounts: [
+                instructionAccountNode({
+                    defaultValue: pdaValueNode(
+                        pdaNode({
+                            name: 'pool',
+                            seeds: [
+                                constantPdaSeedNodeFromBytes('base58', 'F9bS'),
+                                variablePdaSeedNode('tokenX', publicKeyTypeNode()),
+                                constantPdaSeedNodeFromBytes('base58', 'AAAA'),
+                                variablePdaSeedNode('tokenY', publicKeyTypeNode()),
+                            ],
+                        }),
+                        [
+                            pdaSeedValueNode('tokenX', accountValueNode('tokenX')),
+                            pdaSeedValueNode('tokenY', accountValueNode('tokenY')),
+                        ],
+                    ),
+                    isSigner: false,
+                    isWritable: false,
+                    name: 'pool',
+                }),
+                instructionAccountNode({ isSigner: false, isWritable: false, name: 'tokenX' }),
+                instructionAccountNode({ isSigner: false, isWritable: false, name: 'tokenY' }),
+            ],
+            name: 'swapPool',
+        }),
+    ]);
+
+    const result = extractPdasFromProgram(program);
+
+    expect(result.pdas).toHaveLength(1);
+    expect(result.pdas[0].name).toBe('pool');
+    expect(result.pdas[0].seeds[1]).toEqual(variablePdaSeedNode('mintA', publicKeyTypeNode()));
+    expect(result.pdas[0].seeds[3]).toEqual(variablePdaSeedNode('mintB', publicKeyTypeNode()));
+
+    // swapPool's seed labels are rewritten to match the canonical PDA.
+    expect(result.instructions[1].accounts[0].defaultValue).toEqual(
+        pdaValueNode(pdaLinkNode('pool'), [
+            pdaSeedValueNode('mintA', accountValueNode('tokenX')),
+            pdaSeedValueNode('mintB', accountValueNode('tokenY')),
+        ]),
+    );
+});
+
+test('it still distinguishes PDAs that differ in seed type even if names match', () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    const program = makeProgram([
+        instructionNode({
+            accounts: [
+                instructionAccountNode({
+                    defaultValue: pdaValueNode(
+                        pdaNode({
+                            name: 'thing',
+                            seeds: [
+                                constantPdaSeedNodeFromBytes('base58', 'F9bS'),
+                                variablePdaSeedNode('owner', publicKeyTypeNode()),
+                            ],
+                        }),
+                        [pdaSeedValueNode('owner', accountValueNode('owner'))],
+                    ),
+                    isSigner: false,
+                    isWritable: false,
+                    name: 'thing',
+                }),
+                instructionAccountNode({ isSigner: false, isWritable: false, name: 'owner' }),
+            ],
+            name: 'instructionA',
+        }),
+        instructionNode({
+            accounts: [
+                instructionAccountNode({
+                    defaultValue: pdaValueNode(
+                        pdaNode({
+                            name: 'thing',
+                            seeds: [
+                                constantPdaSeedNodeFromBytes('base58', 'F9bS'),
+                                variablePdaSeedNode('owner', numberTypeNode('u64')),
+                            ],
+                        }),
+                        [pdaSeedValueNode('owner', argumentValueNode('owner'))],
+                    ),
+                    isSigner: false,
+                    isWritable: false,
+                    name: 'thing',
+                }),
+            ],
+            arguments: [instructionArgumentNode({ name: 'owner', type: numberTypeNode('u64') })],
+            name: 'instructionB',
+        }),
+    ]);
+
+    const result = extractPdasFromProgram(program);
+
+    expect(result.pdas).toHaveLength(2);
+    expect(result.pdas[0].name).toBe('thing');
+    expect(result.pdas[1].name).toBe('instructionBThing');
+    expect(warnSpy).toHaveBeenCalledOnce();
+
+    warnSpy.mockRestore();
 });

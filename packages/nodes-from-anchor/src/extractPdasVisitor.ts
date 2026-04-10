@@ -7,18 +7,25 @@ import {
     type InstructionNode,
     instructionNode,
     isNode,
+    isNodeFilter,
     pdaLinkNode,
     type PdaNode,
     pdaNode,
+    pdaSeedValueNode,
     type ProgramNode,
     programNode,
+    variablePdaSeedNode,
 } from '@codama/nodes';
 import { bottomUpTransformerVisitor, getUniqueHashStringVisitor, visit, type Visitor } from '@codama/visitors';
 
 type Fingerprint = string;
 
 function pdaFingerprint(pda: PdaNode, hashVisitor: Visitor<string>): Fingerprint {
-    return visit(pdaNode({ ...pda, name: '' }), hashVisitor);
+    // Normalize variable seed names to positional ids so byte-equivalent PDAs hash identically.
+    const normalizedSeeds = pda.seeds.map((seed, index) =>
+        isNode(seed, 'variablePdaSeedNode') ? variablePdaSeedNode(`seed${index}`, seed.type) : seed,
+    );
+    return visit(pdaNode({ ...pda, name: '', seeds: normalizedSeeds }), hashVisitor);
 }
 
 function getUniquePdaName(name: CamelCaseString, usedNames: Set<CamelCaseString>): CamelCaseString {
@@ -85,7 +92,21 @@ export function extractPdasFromProgram(program: ProgramNode): ProgramNode {
             }
 
             const extractedPda = pdaMap.get(fingerprint)!;
-            const defaultValue = { ...account.defaultValue, pda: pdaLinkNode(extractedPda.name) };
+
+            // Rewrite seed value labels to match the canonical PDA's variable seed names.
+            const canonicalSeedNames = extractedPda.seeds.filter(isNodeFilter('variablePdaSeedNode')).map(s => s.name);
+            const localSeedNames = pda.seeds.filter(isNodeFilter('variablePdaSeedNode')).map(s => s.name);
+            const localToCanonical = new Map(localSeedNames.map((local, i) => [local, canonicalSeedNames[i]]));
+            const alignedSeeds = account.defaultValue.seeds.map(seed => {
+                const canonical = localToCanonical.get(seed.name);
+                return canonical && canonical !== seed.name ? pdaSeedValueNode(canonical, seed.value) : seed;
+            });
+
+            const defaultValue = {
+                ...account.defaultValue,
+                pda: pdaLinkNode(extractedPda.name),
+                seeds: alignedSeeds,
+            };
             return instructionAccountNode({ ...account, defaultValue });
         });
 
