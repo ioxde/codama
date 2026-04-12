@@ -28,6 +28,6 @@ export interface ProgramNode<
     readonly instructions: TInstructions;
     readonly definedTypes: TDefinedTypes;
     readonly pdas: TPdas;
-    readonly events: TEvents;
+    readonly events?: TEvents;
     readonly errors: TErrors;
 }

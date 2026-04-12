@@ -131,7 +131,7 @@ describe('parseEventData', () => {
         const result = parseEventData(root, hex('090500416c6963652a'));
         expect(result).toStrictEqual({
             data: { age: 42, discriminator: 9, firstname: 'Alice' },
-            path: [root, root.program, root.program.events[0]],
+            path: [root, root.program, (root.program.events ?? [])[0]],
         });
     });
     test('it parses tuple event data from a root node', () => {
@@ -163,7 +163,7 @@ describe('parseEventData', () => {
         const result = parseEventData(root, hex('01022a000000'));
         expect(result).toStrictEqual({
             data: [42],
-            path: [root, root.program, root.program.events[0]],
+            path: [root, root.program, (root.program.events ?? [])[0]],
         });
     });
 });

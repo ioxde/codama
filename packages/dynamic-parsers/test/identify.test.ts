@@ -191,7 +191,7 @@ describe('identifyEventData', () => {
             }),
         );
         const result = identifyEventData(root, hex('01020304'));
-        expect(result).toStrictEqual([root, root.program, root.program.events[0]]);
+        expect(result).toStrictEqual([root, root.program, (root.program.events ?? [])[0]]);
     });
     test('it fails to identify events whose discriminator nodes do not match the given data', () => {
         const root = rootNode(
@@ -270,6 +270,6 @@ describe('identifyEventData', () => {
             }),
         );
         const result = identifyEventData(root, hex('01022a000000'));
-        expect(result).toStrictEqual([root, root.program, root.program.events[0]]);
+        expect(result).toStrictEqual([root, root.program, (root.program.events ?? [])[0]]);
     });
 });
