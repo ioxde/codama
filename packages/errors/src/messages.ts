@@ -6,6 +6,9 @@
 import {
     CODAMA_ERROR__ANCHOR__ACCOUNT_TYPE_MISSING,
     CODAMA_ERROR__ANCHOR__ARGUMENT_TYPE_MISSING,
+    CODAMA_ERROR__ANCHOR__CPI_EVENTS_DUPLICATE_PROGRAM,
+    CODAMA_ERROR__ANCHOR__CPI_EVENTS_UNKNOWN_EVENT,
+    CODAMA_ERROR__ANCHOR__CPI_EVENTS_UNKNOWN_PROGRAM,
     CODAMA_ERROR__ANCHOR__EVENT_TYPE_MISSING,
     CODAMA_ERROR__ANCHOR__GENERIC_TYPE_MISSING,
     CODAMA_ERROR__ANCHOR__PROGRAM_ID_KIND_UNIMPLEMENTED,
@@ -54,6 +57,7 @@ import {
     CODAMA_ERROR__VISITORS__CYCLIC_DEPENDENCY_DETECTED_WHEN_RESOLVING_INSTRUCTION_DEFAULT_VALUES,
     CODAMA_ERROR__VISITORS__FAILED_TO_VALIDATE_NODE,
     CODAMA_ERROR__VISITORS__INSTRUCTION_ENUM_ARGUMENT_NOT_FOUND,
+    CODAMA_ERROR__VISITORS__INVALID_CPI_DISCRIMINATOR_TYPE,
     CODAMA_ERROR__VISITORS__INVALID_INSTRUCTION_DEFAULT_VALUE_DEPENDENCY,
     CODAMA_ERROR__VISITORS__INVALID_NUMBER_WRAPPER,
     CODAMA_ERROR__VISITORS__INVALID_PDA_SEED_VALUES,
@@ -72,6 +76,12 @@ export const CodamaErrorMessages: Readonly<{
 }> = {
     [CODAMA_ERROR__ANCHOR__ACCOUNT_TYPE_MISSING]: 'Account type [$name] is missing from the IDL types.',
     [CODAMA_ERROR__ANCHOR__ARGUMENT_TYPE_MISSING]: 'Argument name [$name] is missing from the instruction definition.',
+    [CODAMA_ERROR__ANCHOR__CPI_EVENTS_DUPLICATE_PROGRAM]:
+        'cpiEvents contains multiple keys that normalize to the same program name [$normalizedName]. Conflicting keys: [$originalNames].',
+    [CODAMA_ERROR__ANCHOR__CPI_EVENTS_UNKNOWN_EVENT]:
+        'cpiEvents[$programName] references event [$eventName] which is not defined in the program. Available: [$availableEvents].',
+    [CODAMA_ERROR__ANCHOR__CPI_EVENTS_UNKNOWN_PROGRAM]:
+        'cpiEvents references program [$programName] which is not detected as an event-CPI program. Detected: [$detectedPrograms].',
     [CODAMA_ERROR__ANCHOR__EVENT_TYPE_MISSING]: 'Event type [$name] is missing from the IDL types.',
     [CODAMA_ERROR__ANCHOR__GENERIC_TYPE_MISSING]: 'Generic type [$name] is missing from the IDL types.',
     [CODAMA_ERROR__ANCHOR__PROGRAM_ID_KIND_UNIMPLEMENTED]: 'Program ID kind [$kind] is not implemented.',
@@ -141,6 +151,8 @@ export const CodamaErrorMessages: Readonly<{
     [CODAMA_ERROR__VISITORS__FAILED_TO_VALIDATE_NODE]: 'Failed to validate the given node [$formattedHistogram].',
     [CODAMA_ERROR__VISITORS__INSTRUCTION_ENUM_ARGUMENT_NOT_FOUND]:
         'Could not find an enum argument named [$argumentName] for instruction [$instructionName].',
+    [CODAMA_ERROR__VISITORS__INVALID_CPI_DISCRIMINATOR_TYPE]:
+        'CPI discriminator must be a fixedSizeTypeNode wrapping a bytesTypeNode, got [$kind].',
     [CODAMA_ERROR__VISITORS__INVALID_INSTRUCTION_DEFAULT_VALUE_DEPENDENCY]:
         'Dependency [$dependencyName] of kind [$dependencyKind] is not a valid dependency of [$parentName] of kind [$parentKind] in the [$instructionName] instruction.',
     [CODAMA_ERROR__VISITORS__INVALID_NUMBER_WRAPPER]: 'Invalid number wrapper kind [$wrapper].',

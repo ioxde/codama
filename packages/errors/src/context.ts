@@ -22,6 +22,9 @@ import {
 import {
     CODAMA_ERROR__ANCHOR__ACCOUNT_TYPE_MISSING,
     CODAMA_ERROR__ANCHOR__ARGUMENT_TYPE_MISSING,
+    CODAMA_ERROR__ANCHOR__CPI_EVENTS_DUPLICATE_PROGRAM,
+    CODAMA_ERROR__ANCHOR__CPI_EVENTS_UNKNOWN_EVENT,
+    CODAMA_ERROR__ANCHOR__CPI_EVENTS_UNKNOWN_PROGRAM,
     CODAMA_ERROR__ANCHOR__EVENT_TYPE_MISSING,
     CODAMA_ERROR__ANCHOR__GENERIC_TYPE_MISSING,
     CODAMA_ERROR__ANCHOR__PROGRAM_ID_KIND_UNIMPLEMENTED,
@@ -70,6 +73,7 @@ import {
     CODAMA_ERROR__VISITORS__CYCLIC_DEPENDENCY_DETECTED_WHEN_RESOLVING_INSTRUCTION_DEFAULT_VALUES,
     CODAMA_ERROR__VISITORS__FAILED_TO_VALIDATE_NODE,
     CODAMA_ERROR__VISITORS__INSTRUCTION_ENUM_ARGUMENT_NOT_FOUND,
+    CODAMA_ERROR__VISITORS__INVALID_CPI_DISCRIMINATOR_TYPE,
     CODAMA_ERROR__VISITORS__INVALID_INSTRUCTION_DEFAULT_VALUE_DEPENDENCY,
     CODAMA_ERROR__VISITORS__INVALID_NUMBER_WRAPPER,
     CODAMA_ERROR__VISITORS__INVALID_PDA_SEED_VALUES,
@@ -91,6 +95,19 @@ export type CodamaErrorContext = DefaultUnspecifiedErrorContextToUndefined<{
     };
     [CODAMA_ERROR__ANCHOR__ARGUMENT_TYPE_MISSING]: {
         name: string;
+    };
+    [CODAMA_ERROR__ANCHOR__CPI_EVENTS_DUPLICATE_PROGRAM]: {
+        normalizedName: string;
+        originalNames: string[];
+    };
+    [CODAMA_ERROR__ANCHOR__CPI_EVENTS_UNKNOWN_EVENT]: {
+        availableEvents: string[];
+        eventName: string;
+        programName: string;
+    };
+    [CODAMA_ERROR__ANCHOR__CPI_EVENTS_UNKNOWN_PROGRAM]: {
+        detectedPrograms: string[];
+        programName: string;
     };
     [CODAMA_ERROR__ANCHOR__EVENT_TYPE_MISSING]: {
         name: string;
@@ -284,6 +301,9 @@ export type CodamaErrorContext = DefaultUnspecifiedErrorContextToUndefined<{
         argumentName: CamelCaseString;
         instruction: InstructionNode;
         instructionName: CamelCaseString;
+    };
+    [CODAMA_ERROR__VISITORS__INVALID_CPI_DISCRIMINATOR_TYPE]: {
+        kind: string;
     };
     [CODAMA_ERROR__VISITORS__INVALID_INSTRUCTION_DEFAULT_VALUE_DEPENDENCY]: {
         dependency: InstructionAccountNode | InstructionArgumentNode;

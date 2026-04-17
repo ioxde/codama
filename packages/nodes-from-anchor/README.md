@@ -22,7 +22,7 @@ pnpm install @codama/nodes-from-anchor
 
 ## Functions
 
-### `rootNodeFromAnchor(anchorIdl)`
+### `rootNodeFromAnchor(anchorIdl, options?)`
 
 This function takes a valid Anchor IDL and returns a `RootNode`.
 
@@ -39,4 +39,33 @@ const anchorIdl = JSON.parse(readFileSync(anchorIdlPath, 'utf-8'));
 
 // Parse it into a Codama IDL.
 const codama = createFromRoot(rootNodeFromAnchor(anchorIdl));
+```
+
+Pass `cpiEvents` to set which events use `emit_cpi!`. Needed when a program mixes `emit!` and `emit_cpi!`.
+
+| `cpiEvents`      | Events treated as `emit_cpi!`                              |
+| ---------------- | ---------------------------------------------------------- |
+| omitted          | Auto-detect (default).                                     |
+| `['TradeEvent']` | Only the listed events. All others are treated as `emit!`. |
+| `[]`             | None.                                                      |
+
+```js
+const codama = createFromRoot(rootNodeFromAnchor(anchorIdl, { cpiEvents: ['TradeEvent'] }));
+```
+
+> [!NOTE]
+>
+> Only supply `cpiEvents` for programs that mix `emit!` and `emit_cpi!`. If every event uses `emit_cpi!`, omit the option.
+
+For multi-program IDLs parsed via `rootNodeFromAnchorV01(primary, [additional])`, use `defaultVisitor` directly with `cpiEventsByProgram`. Keys are program names; values follow the same rules as the table above.
+
+```js
+import { defaultVisitor, rootNodeFromAnchorV01 } from '@codama/nodes-from-anchor';
+import { createFromRoot } from 'codama';
+import { visit } from '@codama/visitors';
+
+const root = rootNodeFromAnchorV01(primaryIdl, [additionalIdl]);
+const codama = createFromRoot(
+    visit(root, defaultVisitor({ cpiEventsByProgram: { primary: ['TradeEvent'], additional: [] } })),
+);
 ```

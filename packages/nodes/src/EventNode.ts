@@ -21,6 +21,7 @@ export function eventNode<
         // Data.
         name: camelCase(input.name),
         docs: parseDocs(input.docs),
+        ...(input.framing !== undefined && { framing: input.framing }),
 
         // Children.
         data: input.data,

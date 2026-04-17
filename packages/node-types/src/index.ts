@@ -16,6 +16,7 @@ export * from './RootNode';
 export * from './contextualValueNodes';
 export * from './countNodes';
 export * from './discriminatorNodes';
+export * from './eventFramings';
 export * from './linkNodes';
 export * from './pdaSeedNodes';
 export * from './shared';
