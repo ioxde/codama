@@ -6,11 +6,12 @@ This node represents an event emitted by a program.
 
 ### Data
 
-| Attribute | Type              | Description                                      |
-| --------- | ----------------- | ------------------------------------------------ |
-| `kind`    | `"eventNode"`     | The node discriminator.                          |
-| `name`    | `CamelCaseString` | The name of the event.                           |
-| `docs`    | `string[]`        | Additional Markdown documentation for the event. |
+| Attribute | Type                            | Description                                                                                      |
+| --------- | ------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `kind`    | `"eventNode"`                   | The node discriminator.                                                                          |
+| `name`    | `CamelCaseString`               | The name of the event.                                                                           |
+| `docs`    | `string[]`                      | Additional Markdown documentation for the event.                                                 |
+| `framing` | [`EventFraming`](#eventframing) | (Optional) Framing metadata when the event was wrapped by a framing visitor. See variants below. |
 
 ### Children
 
@@ -18,6 +19,17 @@ This node represents an event emitted by a program.
 | ---------------- | ------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `data`           | [`TypeNode`](./typeNodes/README.md)                     | The type node that describes the event payload.                                                                                                                        |
 | `discriminators` | [`DiscriminatorNode`](./discriminatorNodes/README.md)[] | (Optional) The nodes that distinguish this event from others in the program. If multiple discriminators are provided, they are combined using a logical AND operation. |
+
+### EventFraming
+
+Open-ended metadata describing how an event was wrapped on the wire by an upstream producer:
+
+| Field                | Type              | Description                                                                                   |
+| -------------------- | ----------------- | --------------------------------------------------------------------------------------------- |
+| `kind`               | `string`          | Producer-defined discriminator (e.g. `'anchorEventCpi'` from `@codama/nodes-from-anchor`).    |
+| `sharedConstantName` | `CamelCaseString` | Canonical camelCase seed for the hoisted constant. Renderers apply their own case convention. |
+
+Concrete variants are owned by producer packages — codama itself doesn't enumerate them. For example, `@codama/nodes-from-anchor` exports `AnchorEventCpiFraming` and the `anchorEventCpiFraming` constant.
 
 ## Functions
 
