@@ -22,10 +22,17 @@ describe('condition-node-value: visitArgumentValue', () => {
         expect(result).toBe(7);
     });
 
-    test('should throw when intermediate struct arg is missing for nested path', async () => {
+    test('returns undefined (→ ifFalse) when the root condition arg is absent, instead of throwing', async () => {
+        // An unresolved condition must take the ifFalse branch, same as a null account value or a
+        // missing resolver. It must not throw and abort resolution.
         const visitor = makeVisitor({ argumentsInput: {} });
-        await expect(visitor.visitArgumentValue(argumentValueNode('config', ['threshold']))).rejects.toThrow(
-            /Missing argument \[config\] in/,
-        );
+        const result = await visitor.visitArgumentValue(argumentValueNode('config', ['threshold']));
+        expect(result).toBeUndefined();
+    });
+
+    test('returns undefined (→ ifFalse) when an intermediate condition path segment is absent', async () => {
+        const visitor = makeVisitor({ argumentsInput: { config: {} } });
+        const result = await visitor.visitArgumentValue(argumentValueNode('config', ['inner', 'threshold']));
+        expect(result).toBeUndefined();
     });
 });

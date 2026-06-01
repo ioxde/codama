@@ -5,7 +5,7 @@ import type { AccountValueNode, ArgumentValueNode, ResolverValueNode } from 'cod
 import { resolveAccountValueNodeAddress } from '../resolvers/resolve-account-value-node-address';
 import type { BaseResolutionContext } from '../resolvers/types';
 import type { AccountsInput, ArgumentsInput, ResolverFnInput, ResolversInput } from '../shared/types';
-import { resolveArgumentPathValue } from './resolve-argument-path';
+import { tryResolveArgumentPathValue } from './resolve-argument-path';
 
 export const CONDITION_NODE_SUPPORTED_NODE_KINDS = [
     'accountValueNode',
@@ -47,14 +47,12 @@ export function createConditionNodeValueVisitor<
 
         visitArgumentValue: async (node: ArgumentValueNode) => {
             const rootArg = argumentsInput?.[node.name];
-            // Conditions compare runtime values, not encoded bytes — we deliberately do not
-            // recompute the leaf field's TypeNode here. If conditional comparison ever grows a
-            // wire-typed dimension (e.g. comparing encoded discriminators), this branch must also
-            // walk ixArgumentNode.type via resolveArgumentPathType to pick the right type.
+            // Resolve leniently: an unresolved condition is "not present" and takes the ifFalse branch,
+            // same as a null account value or a missing resolver. So a missing or mis-shaped path
+            // segment returns undefined instead of throwing. No TypeNode walk here: conditions compare
+            // runtime values, not encoded bytes.
             const argInput =
-                node.path && node.path.length > 0
-                    ? resolveArgumentPathValue(rootArg, node.path, node.name, ixNode.name)
-                    : rootArg;
+                node.path && node.path.length > 0 ? tryResolveArgumentPathValue(rootArg, node.path) : rootArg;
             return await Promise.resolve(argInput);
         },
 

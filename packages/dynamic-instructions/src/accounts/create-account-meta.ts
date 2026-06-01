@@ -104,6 +104,7 @@ export async function createAccountMeta<
             if (!remainingNode.isOptional) {
                 throw new CodamaError(CODAMA_ERROR__DYNAMIC_CLIENT__ARGUMENT_MISSING, {
                     argumentName: remainingNode.value.name,
+                    argumentPath: '',
                     instructionName: ixNode.name,
                 });
             }

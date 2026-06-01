@@ -1,21 +1,14 @@
 import {
     CODAMA_ERROR__DYNAMIC_CLIENT__ARGUMENT_MISSING,
+    CODAMA_ERROR__DYNAMIC_CLIENT__INVALID_ARGUMENT_INPUT,
     CODAMA_ERROR__DYNAMIC_CLIENT__INVARIANT_VIOLATION,
     CODAMA_ERROR__LINKED_NODE_NOT_FOUND,
     CodamaError,
 } from '@codama/errors';
-import type { ArgumentValueNode, CamelCaseString, RootNode, TypeNode } from 'codama';
+import type { CamelCaseString, RootNode, TypeNode } from 'codama';
 import { isNode } from 'codama';
 
-import { isObjectRecord } from '../shared/util';
-
-/**
- * Format an ArgumentValueNode reference as a dotted display string.
- * Example: `{ name: "planData", path: ["planId"] }` → `"planData.planId"`.
- */
-export function formatArgumentReference(node: ArgumentValueNode): string {
-    return node.path && node.path.length > 0 ? `${node.name}.${node.path.join('.')}` : node.name;
-}
+import { isObjectRecord, safeStringify } from '../shared/util';
 
 /**
  * Format a path array as the `argumentPath` suffix expected by ARGUMENT_MISSING error context.
@@ -58,9 +51,45 @@ export function resolveArgumentPathType(
 }
 
 /**
- * Walks `path` through a top-level argument input value to the leaf value.
- * Each step requires the intermediate value to be a non-null object.
- * Throws ARGUMENT_MISSING if any intermediate (or the leaf) is undefined/null.
+ * Result of walking a sub-path. `resolved` holds the leaf value; the failure variants say why the
+ * walk stopped, so callers can treat it as fatal (strict resolution) or "not present" (lenient).
+ * `visited` is the path consumed before the failing segment.
+ */
+type ArgumentPathWalk =
+    | {
+          readonly kind: 'notObject';
+          readonly segment: CamelCaseString;
+          readonly value: unknown;
+          readonly visited: readonly CamelCaseString[];
+      }
+    | { readonly kind: 'missing'; readonly visited: readonly CamelCaseString[] }
+    | { readonly kind: 'resolved'; readonly value: unknown };
+
+/**
+ * Walks `path` through an argument value, descending into struct fields by name. Returns a result
+ * instead of throwing so both resolvers below share one copy of the descent logic.
+ */
+function walkArgumentPathValue(rootValue: unknown, path: readonly CamelCaseString[]): ArgumentPathWalk {
+    let current = rootValue;
+    const visited: CamelCaseString[] = [];
+    for (const segment of path) {
+        if (current === undefined || current === null) {
+            return { kind: 'missing', visited: [...visited] };
+        }
+        if (!isObjectRecord(current)) {
+            return { kind: 'notObject', segment, value: current, visited: [...visited] };
+        }
+        current = current[segment];
+        visited.push(segment);
+    }
+    return { kind: 'resolved', value: current };
+}
+
+/**
+ * Resolves `path` to the leaf value where it's required (PDA seeds, account defaults). Throws
+ * ARGUMENT_MISSING if an intermediate or leaf is absent, or INVALID_ARGUMENT_INPUT if a value's shape
+ * contradicts the declared type (a primitive where a struct is expected). Both come from
+ * caller-supplied `argumentsInput`, so they're user errors, not internal invariants.
  */
 export function resolveArgumentPathValue(
     rootValue: unknown,
@@ -68,25 +97,30 @@ export function resolveArgumentPathValue(
     argumentName: CamelCaseString,
     instructionName: CamelCaseString,
 ): unknown {
-    let current = rootValue;
-    const visited: CamelCaseString[] = [];
-    for (const segment of path) {
-        if (current === undefined || current === null) {
-            throw new CodamaError(CODAMA_ERROR__DYNAMIC_CLIENT__ARGUMENT_MISSING, {
-                argumentName,
-                argumentPath: pathSuffix(visited),
-                instructionName,
-            });
-        }
-        if (!isObjectRecord(current)) {
-            throw new CodamaError(CODAMA_ERROR__DYNAMIC_CLIENT__INVARIANT_VIOLATION, {
-                message: `Cannot read "${segment}" from argument "${argumentName}${pathSuffix(visited)}": value is not an object.`,
-            });
-        }
-        current = current[segment];
-        visited.push(segment);
+    const walk = walkArgumentPathValue(rootValue, path);
+    if (walk.kind === 'resolved') return walk.value;
+    if (walk.kind === 'missing') {
+        throw new CodamaError(CODAMA_ERROR__DYNAMIC_CLIENT__ARGUMENT_MISSING, {
+            argumentName,
+            argumentPath: pathSuffix(walk.visited),
+            instructionName,
+        });
     }
-    return current;
+    throw new CodamaError(CODAMA_ERROR__DYNAMIC_CLIENT__INVALID_ARGUMENT_INPUT, {
+        argumentName,
+        expectedType: `an object at "${argumentName}${pathSuffix(walk.visited)}" to read "${walk.segment}"`,
+        value: safeStringify(walk.value),
+    });
+}
+
+/**
+ * Lenient counterpart to {@link resolveArgumentPathValue}, for cases where a non-resolved value is
+ * "not present" rather than an error (e.g. a conditional's condition). Returns `undefined` for any
+ * path that doesn't fully resolve; never throws.
+ */
+export function tryResolveArgumentPathValue(rootValue: unknown, path: readonly CamelCaseString[]): unknown {
+    const walk = walkArgumentPathValue(rootValue, path);
+    return walk.kind === 'resolved' ? walk.value : undefined;
 }
 
 function unwrapDefinedTypeLink(node: TypeNode, root: RootNode, seen: Set<CamelCaseString> = new Set()): TypeNode {

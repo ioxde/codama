@@ -100,8 +100,8 @@ function getNodeDetails(node: Node): string[] {
         case 'resolverValueNode':
             return [node.name];
         case 'argumentValueNode':
-            // Mirrors `formatArgumentReference` in @codama/dynamic-address-resolution. Inlined here
-            // to avoid a cross-package dependency for a one-line render.
+            // Render a nested arg reference as a dotted path (`name.sub.field`). Inlined to avoid a
+            // cross-package dependency on @codama/dynamic-address-resolution for a one-line render.
             return [node.path && node.path.length > 0 ? `${node.name}.${node.path.join('.')}` : node.name];
         case 'constantDiscriminatorNode':
             return [...(node.offset > 0 ? [`offset:${node.offset}`] : [])];

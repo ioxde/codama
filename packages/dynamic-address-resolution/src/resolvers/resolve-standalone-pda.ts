@@ -101,6 +101,7 @@ function resolveStandaloneVariableSeed(
         }
         throw new CodamaError(CODAMA_ERROR__DYNAMIC_CLIENT__ARGUMENT_MISSING, {
             argumentName: seedNode.name,
+            argumentPath: '',
             instructionName: camelCase('standaloneSeedNode'),
         });
     }

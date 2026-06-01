@@ -1,6 +1,13 @@
+import {
+    CODAMA_ERROR__DYNAMIC_CLIENT__ARGUMENT_MISSING,
+    CODAMA_ERROR__DYNAMIC_CLIENT__INVALID_ARGUMENT_INPUT,
+    isCodamaError,
+} from '@codama/errors';
+import { camelCase } from 'codama';
 import { describe, expect, expectTypeOf, test } from 'vitest';
 
 import { formatValueType, isObjectRecord, safeStringify } from '../../src/shared/util';
+import { resolveArgumentPathValue, tryResolveArgumentPathValue } from '../../src/visitors/resolve-argument-path';
 
 describe('isObjectRecord', () => {
     test('should return true for plain objects', () => {
@@ -103,3 +110,54 @@ describe('safeStringify', () => {
         expectTypeOf(safeStringify).returns.toBeString();
     });
 });
+
+describe('resolveArgumentPathValue', () => {
+    test('resolves a nested struct field value', () => {
+        expect(
+            resolveArgumentPathValue({ threshold: 7 }, [camelCase('threshold')], camelCase('config'), camelCase('ix')),
+        ).toBe(7);
+    });
+
+    test('throws ARGUMENT_MISSING (a user-facing error) when an intermediate value is absent', () => {
+        const error = captureThrow(() =>
+            resolveArgumentPathValue(undefined, [camelCase('threshold')], camelCase('config'), camelCase('ix')),
+        );
+        expect(isCodamaError(error, CODAMA_ERROR__DYNAMIC_CLIENT__ARGUMENT_MISSING)).toBe(true);
+    });
+
+    test('throws a user-facing INVALID_ARGUMENT_INPUT (not an internal invariant) when descending into a non-object', () => {
+        // Reachable from caller-supplied argumentsInput (a primitive where a struct is declared), so
+        // it's a user error, not an internal invariant.
+        const error = captureThrow(() =>
+            resolveArgumentPathValue(5, [camelCase('field')], camelCase('input'), camelCase('ix')),
+        );
+        expect(isCodamaError(error, CODAMA_ERROR__DYNAMIC_CLIENT__INVALID_ARGUMENT_INPUT)).toBe(true);
+    });
+});
+
+describe('tryResolveArgumentPathValue', () => {
+    test('resolves a present nested value', () => {
+        expect(tryResolveArgumentPathValue({ threshold: 7 }, [camelCase('threshold')])).toBe(7);
+    });
+
+    test('returns undefined when the root value is absent', () => {
+        expect(tryResolveArgumentPathValue(undefined, [camelCase('threshold')])).toBeUndefined();
+    });
+
+    test('returns undefined when an intermediate path segment is absent', () => {
+        expect(tryResolveArgumentPathValue({}, [camelCase('inner'), camelCase('flag')])).toBeUndefined();
+    });
+
+    test('returns undefined (never throws) when descending into a non-object', () => {
+        expect(tryResolveArgumentPathValue(5, [camelCase('field')])).toBeUndefined();
+    });
+});
+
+function captureThrow(fn: () => unknown): unknown {
+    try {
+        fn();
+    } catch (error) {
+        return error;
+    }
+    throw new Error('Expected function to throw, but it did not.');
+}

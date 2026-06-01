@@ -95,6 +95,7 @@ function encodeRequiredArgument(
     if (input === undefined) {
         throw new CodamaError(CODAMA_ERROR__DYNAMIC_CLIENT__ARGUMENT_MISSING, {
             argumentName: ixArgumentNode.name,
+            argumentPath: '',
             instructionName: ix.name,
         });
     }
