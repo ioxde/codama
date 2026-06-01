@@ -97,19 +97,18 @@ export function createPdaSeedValueVisitor(
                     referencedName: node.name,
                 });
             }
-            const argFieldType =
-                node.path && node.path.length > 0
+            // seedTypeNode (the seed's declared type) wins so bytes match the on-chain derivation.
+            // Only walk the arg path when it's absent: otherwise the result is discarded, yet the
+            // walk can still throw and fail an encode seedTypeNode + value would have completed.
+            const typeNode =
+                seedTypeNode ??
+                (node.path && node.path.length > 0
                     ? resolveArgumentPathType(ixArgumentNode.type, node.path, root, node.name)
-                    : ixArgumentNode.type;
+                    : ixArgumentNode.type);
             const argInput =
                 node.path && node.path.length > 0
                     ? resolveArgumentPathValue(argumentsInput[node.name], node.path, node.name, ixNode.name)
                     : argumentsInput[node.name];
-
-            // Use the PDA seed's declared type (e.g. plain stringTypeNode) rather than
-            // the (nested) instruction argument's type (e.g. sizePrefixTypeNode) so the
-            // seed bytes match what the on-chain program derives.
-            const typeNode = seedTypeNode ?? argFieldType;
 
             if (argInput === undefined || argInput === null) {
                 // optional remainderOptionTypeNode seeds encodes to zero bytes.

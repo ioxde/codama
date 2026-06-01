@@ -1,8 +1,10 @@
 import { getU64Encoder, getUtf8Codec } from '@solana/codecs';
 import {
     argumentValueNode,
+    arrayTypeNode,
     definedTypeLinkNode,
     definedTypeNode,
+    fixedCountNode,
     instructionArgumentNode,
     instructionNode,
     numberTypeNode,
@@ -154,6 +156,48 @@ describe('pda-seed-value: visitArgumentValue', () => {
             });
             const result = await visitor.visitArgumentValue(argumentValueNode('planData', ['planId']));
             expect(result).toEqual(getU64Encoder().encode(7n));
+        });
+    });
+
+    describe('nested paths when seedTypeNode is provided (the real PDA-resolution path)', () => {
+        // resolveVariablePdaSeed always passes seedTypeNode, so the declared seed type drives encoding;
+        // the arg-path walk must never fail an encode that seedTypeNode + the value can complete.
+
+        test('encodes via seedTypeNode even when the declared arg type cannot be walked to the leaf', async () => {
+            // Arg type is an unresolvable definedTypeLink, but seedTypeNode (u64) + the value still encode.
+            const ixNode = instructionNode({
+                arguments: [instructionArgumentNode({ name: 'config', type: definedTypeLinkNode('externalConfig') })],
+                name: 'doThing',
+            });
+            const visitor = makeVisitor({
+                argumentsInput: { config: { amount: 5n } },
+                ixNode,
+                seedTypeNode: numberTypeNode('u64'),
+            });
+            const result = await visitor.visitArgumentValue(argumentValueNode('config', ['amount']));
+            expect(result).toEqual(getU64Encoder().encode(5n));
+        });
+
+        test('a runtime-shape mismatch reports a user-facing error, not an internal invariant', async () => {
+            // Descending into a non-object (here an array) is bad user input: pda-seed must report it
+            // like account-default-value does, not as an internal invariant from the arg-path walk.
+            const ixNode = instructionNode({
+                arguments: [
+                    instructionArgumentNode({
+                        name: 'items',
+                        type: arrayTypeNode(numberTypeNode('u8'), fixedCountNode(3)),
+                    }),
+                ],
+                name: 'doThing',
+            });
+            const visitor = makeVisitor({
+                argumentsInput: { items: [1, 2, 3] },
+                ixNode,
+                seedTypeNode: numberTypeNode('u8'),
+            });
+            const promise = visitor.visitArgumentValue(argumentValueNode('items', ['0']));
+            await expect(promise).rejects.toThrow(/Invalid argument input/);
+            await expect(promise).rejects.not.toThrow(/Internal invariant violation/);
         });
     });
 
