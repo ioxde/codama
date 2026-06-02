@@ -118,11 +118,25 @@ describe('resolveArgumentPathValue', () => {
         ).toBe(7);
     });
 
+    test('should walk through an array via numeric path segment', () => {
+        // Root arg is `pair`, sub-path is `['1']`; the resolver indexes the tuple/array value.
+        const rootValue = [7, 9];
+        expect(resolveArgumentPathValue(rootValue, [camelCase('1')], camelCase('pair'), camelCase('ix'))).toBe(9);
+    });
+
     test('throws ARGUMENT_MISSING (a user-facing error) when an intermediate value is absent', () => {
         const error = captureThrow(() =>
             resolveArgumentPathValue(undefined, [camelCase('threshold')], camelCase('config'), camelCase('ix')),
         );
         expect(isCodamaError(error, CODAMA_ERROR__DYNAMIC_CLIENT__ARGUMENT_MISSING)).toBe(true);
+    });
+
+    test('throws a user-facing INVALID_ARGUMENT_INPUT (not an internal invariant) when indexing past a too-short tuple', () => {
+        // The declared type validated index 1 against a 2-tuple, but the user passed a 1-element array.
+        const error = captureThrow(() =>
+            resolveArgumentPathValue([7], [camelCase('1')], camelCase('pair'), camelCase('ix')),
+        );
+        expect(isCodamaError(error, CODAMA_ERROR__DYNAMIC_CLIENT__INVALID_ARGUMENT_INPUT)).toBe(true);
     });
 
     test('throws a user-facing INVALID_ARGUMENT_INPUT (not an internal invariant) when descending into a non-object', () => {
@@ -146,6 +160,10 @@ describe('tryResolveArgumentPathValue', () => {
 
     test('returns undefined when an intermediate path segment is absent', () => {
         expect(tryResolveArgumentPathValue({}, [camelCase('inner'), camelCase('flag')])).toBeUndefined();
+    });
+
+    test('returns undefined (never throws) when a tuple index is out of bounds', () => {
+        expect(tryResolveArgumentPathValue([7], [camelCase('1')])).toBeUndefined();
     });
 
     test('returns undefined (never throws) when descending into a non-object', () => {

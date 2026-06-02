@@ -1,5 +1,6 @@
 import {
     accountValueNode,
+    argumentValueNode,
     instructionAccountNode,
     instructionArgumentNode,
     instructionNode,
@@ -7,10 +8,12 @@ import {
     pdaSeedValueNode,
     pdaValueNode,
     publicKeyTypeNode,
+    structFieldTypeNode,
+    structTypeNode,
 } from '@codama/nodes';
 import { expect, test } from 'vitest';
 
-import { getResolvedInstructionInputsVisitor, visit } from '../src';
+import { deduplicateInstructionDependencies, getResolvedInstructionInputsVisitor, visit } from '../src';
 
 test('it returns all instruction accounts in order of resolution', () => {
     // Given the following instruction node with an account that defaults to another account.
@@ -265,6 +268,32 @@ test('it resolves the seeds of a PdaValueNode first', () => {
     ]);
 });
 
+test('it resolves nested-arg PDA seeds via the root argument', () => {
+    const node = instructionNode({
+        accounts: [
+            instructionAccountNode({
+                defaultValue: pdaValueNode('counter', [
+                    pdaSeedValueNode('inputSeed', argumentValueNode('input', ['seed'])),
+                ]),
+                isSigner: false,
+                isWritable: false,
+                name: 'counter',
+            }),
+        ],
+        arguments: [
+            instructionArgumentNode({
+                name: 'input',
+                type: structTypeNode([structFieldTypeNode({ name: 'seed', type: numberTypeNode('u8') })]),
+            }),
+        ],
+        name: 'myInstruction',
+    });
+
+    const result = visit(node, getResolvedInstructionInputsVisitor());
+    const counter = result.find(r => r.name === 'counter');
+    expect(counter?.dependsOn).toEqual([argumentValueNode('input', ['seed'])]);
+});
+
 test('it resolves the program id of a PdaValueNode first', () => {
     // Given the following instruction node with an account that defaults to another account.
     const node = instructionNode({
@@ -304,4 +333,11 @@ test('it resolves the program id of a PdaValueNode first', () => {
             resolvedIsSigner: false,
         },
     ]);
+});
+
+test('deduplicateInstructionDependencies preserves distinct nested paths sharing a flat name', () => {
+    const a = argumentValueNode('foo_bar', ['x']);
+    const b = argumentValueNode('foo', ['bar_x']);
+    const result = deduplicateInstructionDependencies([a, b]);
+    expect(result).toHaveLength(2);
 });

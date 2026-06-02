@@ -1,4 +1,12 @@
-import { assertIsNode, numberTypeNode, publicKeyTypeNode, tupleTypeNode } from '@codama/nodes';
+import {
+    accountValueNode,
+    assertIsNode,
+    numberTypeNode,
+    pdaLinkNode,
+    pdaValueNode,
+    publicKeyTypeNode,
+    tupleTypeNode,
+} from '@codama/nodes';
 import { expect, test } from 'vitest';
 
 import { identityVisitor, interceptVisitor, visit } from '../src';
@@ -18,6 +26,20 @@ test('it visits all nodes and returns different instances of the same nodes', ()
     assertIsNode(result, 'tupleTypeNode');
     expect(result.items[0]).not.toBe(node.items[0]);
     expect(result.items[1]).not.toBe(node.items[1]);
+});
+
+// identityVisitor must preserve programId, else a cross-program PDA's dynamic ref is lost downstream.
+test('it preserves the program id of a pda value node', () => {
+    const node = pdaValueNode(pdaLinkNode('associatedToken'), [], accountValueNode('tokenProgram'));
+    const result = visit(node, identityVisitor());
+    expect(result).toEqual(node);
+});
+
+test('it cascades null up when a programId child visit returns null', () => {
+    const node = pdaValueNode(pdaLinkNode('associatedToken'), [], accountValueNode('tokenProgram'));
+    const visitor = identityVisitor();
+    visitor.visitAccountValue = () => null;
+    expect(visit(node, visitor)).toBeNull();
 });
 
 test('it can remove nodes by returning null', () => {

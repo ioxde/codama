@@ -1,10 +1,10 @@
+import { getAddressEncoder } from '@solana/addresses';
 import { getU64Encoder, getUtf8Codec } from '@solana/codecs';
+import type { StructFieldTypeNode, TypeNode } from 'codama';
 import {
     argumentValueNode,
-    arrayTypeNode,
     definedTypeLinkNode,
     definedTypeNode,
-    fixedCountNode,
     instructionArgumentNode,
     instructionNode,
     numberTypeNode,
@@ -16,6 +16,7 @@ import {
     stringTypeNode,
     structFieldTypeNode,
     structTypeNode,
+    tupleTypeNode,
 } from 'codama';
 import { describe, expect, test } from 'vitest';
 
@@ -179,23 +180,19 @@ describe('pda-seed-value: visitArgumentValue', () => {
         });
 
         test('a runtime-shape mismatch reports a user-facing error, not an internal invariant', async () => {
-            // Descending into a non-object (here an array) is bad user input: pda-seed must report it
-            // like account-default-value does, not as an internal invariant from the arg-path walk.
+            // Descending into a non-indexable primitive (here a number) is bad user input: pda-seed must
+            // report it like account-default-value does, not as an internal invariant from the arg-path walk.
+            // (Structs index by field name and tuples/arrays by numeric index; a scalar has neither.)
             const ixNode = instructionNode({
-                arguments: [
-                    instructionArgumentNode({
-                        name: 'items',
-                        type: arrayTypeNode(numberTypeNode('u8'), fixedCountNode(3)),
-                    }),
-                ],
+                arguments: [instructionArgumentNode({ name: 'count', type: numberTypeNode('u8') })],
                 name: 'doThing',
             });
             const visitor = makeVisitor({
-                argumentsInput: { items: [1, 2, 3] },
+                argumentsInput: { count: 5 },
                 ixNode,
                 seedTypeNode: numberTypeNode('u8'),
             });
-            const promise = visitor.visitArgumentValue(argumentValueNode('items', ['0']));
+            const promise = visitor.visitArgumentValue(argumentValueNode('count', ['0']));
             await expect(promise).rejects.toThrow(/Invalid argument input/);
             await expect(promise).rejects.not.toThrow(/Internal invariant violation/);
         });
@@ -255,5 +252,209 @@ describe('pda-seed-value: visitArgumentValue', () => {
             const result = await visitor.visitArgumentValue(argumentValueNode('authority'));
             expect(result).toEqual(new Uint8Array(0));
         });
+    });
+
+    describe('full path-walking: struct depth, tuple index, chained links', () => {
+        const ixNodeWithInput = (type: TypeNode) =>
+            instructionNode({
+                arguments: [instructionArgumentNode({ name: 'input', type })],
+                name: 'nestedExample',
+            });
+        const inputStruct = (...fields: StructFieldTypeNode[]) => ixNodeWithInput(structTypeNode(fields));
+
+        test('should encode nested struct field one level deep', async () => {
+            const pubkey = await generateAddress();
+            const visitor = makeVisitor({
+                argumentsInput: { input: { pubkey } },
+                ixNode: inputStruct(structFieldTypeNode({ name: 'pubkey', type: publicKeyTypeNode() })),
+            });
+
+            const result = await visitor.visitArgumentValue(argumentValueNode('input', ['pubkey']));
+            expect(result).toEqual(getAddressEncoder().encode(pubkey));
+        });
+
+        test('should encode nested struct field two levels deep', async () => {
+            const visitor = makeVisitor({
+                argumentsInput: { input: { innerStruct: { seedEnum: 2 } } },
+                ixNode: inputStruct(
+                    structFieldTypeNode({
+                        name: 'innerStruct',
+                        type: structTypeNode([structFieldTypeNode({ name: 'seedEnum', type: numberTypeNode('u8') })]),
+                    }),
+                ),
+            });
+
+            const result = await visitor.visitArgumentValue(argumentValueNode('input', ['inner_struct', 'seed_enum']));
+            expect(result).toEqual(new Uint8Array([2]));
+        });
+
+        test('should disambiguate sibling fields sharing a leaf name', async () => {
+            const visitor = makeVisitor({
+                argumentsInput: { input: { innerStruct: { seedEnum: 1 }, seedEnum: 0 } },
+                ixNode: inputStruct(
+                    structFieldTypeNode({ name: 'seedEnum', type: numberTypeNode('u8') }),
+                    structFieldTypeNode({
+                        name: 'innerStruct',
+                        type: structTypeNode([structFieldTypeNode({ name: 'seedEnum', type: numberTypeNode('u8') })]),
+                    }),
+                ),
+            });
+
+            const shallow = await visitor.visitArgumentValue(argumentValueNode('input', ['seed_enum']));
+            const deep = await visitor.visitArgumentValue(argumentValueNode('input', ['inner_struct', 'seed_enum']));
+
+            expect(shallow).toEqual(new Uint8Array([0]));
+            expect(deep).toEqual(new Uint8Array([1]));
+        });
+
+        test('should resolve by flat arg name when path is absent', async () => {
+            // Single-level args (no nested path) keep working via exact name lookup.
+            const visitor = makeVisitor({
+                argumentsInput: { inputInner: 2 },
+                ixNode: instructionNode({
+                    arguments: [instructionArgumentNode({ name: 'inputInner', type: numberTypeNode('u8') })],
+                    name: 'flatExample',
+                }),
+            });
+
+            const result = await visitor.visitArgumentValue(argumentValueNode('inputInner'));
+            expect(result).toEqual(new Uint8Array([2]));
+        });
+
+        test('should not infer nested traversal from a flat name when path is absent', async () => {
+            const visitor = makeVisitor({
+                argumentsInput: { input: { seed: 1 } },
+                ixNode: inputStruct(structFieldTypeNode({ name: 'seed', type: numberTypeNode('u8') })),
+            });
+            await expect(visitor.visitArgumentValue(argumentValueNode('inputSeed'))).rejects.toThrow(
+                /Referenced node \[inputSeed\] not found/,
+            );
+        });
+
+        test('should index into tuple field by position', async () => {
+            const visitor = makeVisitor({
+                argumentsInput: { input: { pair: [7, 9] } },
+                ixNode: inputStruct(
+                    structFieldTypeNode({
+                        name: 'pair',
+                        type: tupleTypeNode([numberTypeNode('u8'), numberTypeNode('u8')]),
+                    }),
+                ),
+            });
+
+            const result = await visitor.visitArgumentValue(argumentValueNode('input', ['pair', '1']));
+            expect(result).toEqual(new Uint8Array([9]));
+        });
+
+        test('should resolve nested field through chained definedTypeLinkNode', async () => {
+            // OuterAlias → InnerStruct: a defined type that aliases another defined type.
+            const root = rootNode(
+                programNode({
+                    definedTypes: [
+                        definedTypeNode({ name: 'OuterAlias', type: definedTypeLinkNode('InnerStruct') }),
+                        definedTypeNode({
+                            name: 'InnerStruct',
+                            type: structTypeNode([
+                                structFieldTypeNode({ name: 'seedField', type: numberTypeNode('u8') }),
+                            ]),
+                        }),
+                    ],
+                    name: 'test',
+                    publicKey: '11111111111111111111111111111111',
+                }),
+            );
+            const visitor = makeVisitor({
+                argumentsInput: { input: { seedField: 5 } },
+                ixNode: instructionNode({
+                    arguments: [instructionArgumentNode({ name: 'input', type: definedTypeLinkNode('OuterAlias') })],
+                    name: 'chainedExample',
+                }),
+                root,
+            });
+
+            const result = await visitor.visitArgumentValue(argumentValueNode('input', ['seed_field']));
+            expect(result).toEqual(new Uint8Array([5]));
+        });
+
+        test('should bail out on cyclic definedTypeLinkNode chain', async () => {
+            // A -> B -> A. The link-resolution loop must detect the cycle and abort, not spin forever.
+            const root = rootNode(
+                programNode({
+                    definedTypes: [
+                        definedTypeNode({ name: 'A', type: definedTypeLinkNode('B') }),
+                        definedTypeNode({ name: 'B', type: definedTypeLinkNode('A') }),
+                    ],
+                    name: 'test',
+                    publicKey: '11111111111111111111111111111111',
+                }),
+            );
+            const visitor = makeVisitor({
+                argumentsInput: { input: { whatever: 1 } },
+                ixNode: instructionNode({
+                    arguments: [instructionArgumentNode({ name: 'input', type: definedTypeLinkNode('A') })],
+                    name: 'cyclicExample',
+                }),
+                root,
+            });
+            await expect(visitor.visitArgumentValue(argumentValueNode('input', ['whatever']))).rejects.toThrow(
+                /Circular definedTypeLinkNode chain/,
+            );
+        });
+
+        test.each([
+            {
+                argumentsInput: { input: {} },
+                description: 'when an intermediate path segment is missing from input',
+                expectedError: /Missing argument \[input\.innerStruct\]/,
+                ixNode: inputStruct(
+                    structFieldTypeNode({
+                        name: 'innerStruct',
+                        type: structTypeNode([structFieldTypeNode({ name: 'seedEnum', type: numberTypeNode('u8') })]),
+                    }),
+                ),
+                path: ['inner_struct', 'seed_enum'],
+                seedName: 'input',
+            },
+            {
+                argumentsInput: { input: { pair: [1, 2] } },
+                description: 'when a tuple index is out of range',
+                expectedError: /tuple has no item at index "5"/,
+                ixNode: inputStruct(
+                    structFieldTypeNode({
+                        name: 'pair',
+                        type: tupleTypeNode([numberTypeNode('u8'), numberTypeNode('u8')]),
+                    }),
+                ),
+                path: ['pair', '5'],
+                seedName: 'input',
+            },
+            {
+                argumentsInput: { input: { innerStruct: 1 } },
+                description: 'when the path references a non-existent field',
+                expectedError: /struct has no field "bogus"/,
+                ixNode: inputStruct(structFieldTypeNode({ name: 'innerStruct', type: numberTypeNode('u8') })),
+                path: ['bogus'],
+                seedName: 'input',
+            },
+        ])('should throw $description', async ({ argumentsInput, expectedError, ixNode, path, seedName }) => {
+            const visitor = makeVisitor({ argumentsInput, ixNode });
+            await expect(visitor.visitArgumentValue(argumentValueNode(seedName, path))).rejects.toThrow(expectedError);
+        });
+    });
+});
+
+describe('pda-seed-value: visitArgumentValue (extra arguments)', () => {
+    test('should resolve a seed value from a non-serialized extra argument', async () => {
+        const authority = await generateAddress();
+        const visitor = makeVisitor({
+            argumentsInput: { mintAuthority: authority },
+            ixNode: instructionNode({
+                extraArguments: [instructionArgumentNode({ name: 'mintAuthority', type: publicKeyTypeNode() })],
+                name: 'testInstruction',
+            }),
+        });
+
+        const result = await visitor.visitArgumentValue(argumentValueNode('mintAuthority'));
+        expect(result).toEqual(getAddressEncoder().encode(authority));
     });
 });

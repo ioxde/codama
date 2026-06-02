@@ -12,6 +12,8 @@ import {
     pdaValueNode,
     programNode,
     publicKeyTypeNode,
+    structFieldTypeNode,
+    structTypeNode,
     variablePdaSeedNode,
 } from '@codama/nodes';
 import { LinkableDictionary, visit } from '@codama/visitors-core';
@@ -168,4 +170,51 @@ test('it ignores default seeds missing from the instruction', () => {
             pdaSeedValueNode('seed2', argumentValueNode('seed2')),
         ]),
     );
+});
+
+test('it accepts nested-path argumentValueNode seeds in strict mode', () => {
+    const program = programNode({
+        name: 'myProgram',
+        pdas: [pdaNode({ name: 'myPda', seeds: [variablePdaSeedNode('inputSeed', numberTypeNode('u8'))] })],
+        publicKey: '1111',
+    });
+    const pda = program.pdas[0];
+    const linkables = new LinkableDictionary();
+    linkables.recordPath([program, pda]);
+
+    // #992 convention: the argumentValueNode root `input` matches the top-level arg; `path` holds the sub-field.
+    const node = pdaValueNode('myPda', [pdaSeedValueNode('inputSeed', argumentValueNode('input', ['seed']))]);
+    const instruction = instructionNode({
+        arguments: [
+            instructionArgumentNode({
+                name: 'input',
+                type: structTypeNode([structFieldTypeNode({ name: 'seed', type: numberTypeNode('u8') })]),
+            }),
+        ],
+        name: 'myInstruction',
+    });
+
+    expect(() => visit(node, fillDefaultPdaSeedValuesVisitor([program, instruction], linkables, true))).not.toThrow();
+});
+
+test('it preserves pdaValueNode.programId', () => {
+    const program = programNode({
+        name: 'p',
+        pdas: [pdaNode({ name: 'myPda', seeds: [variablePdaSeedNode('seed1', numberTypeNode('u64'))] })],
+        publicKey: '11111111111111111111111111111111',
+    });
+    const linkables = new LinkableDictionary();
+    linkables.recordPath([program, program.pdas[0]]);
+
+    const instruction = instructionNode({
+        accounts: [instructionAccountNode({ isSigner: false, isWritable: false, name: 'foreignProg' })],
+        arguments: [instructionArgumentNode({ name: 'seed1', type: numberTypeNode('u64') })],
+        name: 'doThing',
+    });
+
+    const node = pdaValueNode('myPda', [], accountValueNode('foreignProg'));
+
+    const result = visit(node, fillDefaultPdaSeedValuesVisitor([program, instruction], linkables));
+
+    expect(result.programId).toEqual(accountValueNode('foreignProg'));
 });

@@ -16,6 +16,12 @@ test('u16', () => {
     expect(codec.decode(hex('2a00'))).toBe(42);
 });
 
+test('u16 big-endian honors node.endian', () => {
+    const codec = getNodeCodec([numberTypeNode('u16', 'be')]);
+    expect(codec.encode(42)).toStrictEqual(hex('002a'));
+    expect(codec.decode(hex('002a'))).toBe(42);
+});
+
 test('u32', () => {
     const codec = getNodeCodec([numberTypeNode('u32')]);
     expect(codec.encode(42)).toStrictEqual(hex('2a000000'));
