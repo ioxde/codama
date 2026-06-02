@@ -64,10 +64,39 @@ jobs:
           git status
           test -z "$(git status --porcelain)"
 
+  publish-preview:
+    name: Publish preview packages
+    runs-on: ubuntu-latest
+    # Only run on the fork, where the pkg.pr.new GitHub App is installed.
+    if: github.repository_owner == 'ioxde'
+    needs: [lint, tests]
+    steps:
+      - name: Git checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm build
+
+      - name: Publish preview packages
+        run: pnpm exec pkg-pr-new publish --commentWithSha './packages/*'
+
   release:
     name: Release
     runs-on: ubuntu-latest
-    if: github.event_name == 'push'
+    # Only the upstream repo can publish to the @codama/* npm scope.
+    if: github.event_name == 'push' && github.repository == 'codama-idl/codama'
     needs: [lint, tests]
     permissions:
       contents: write
