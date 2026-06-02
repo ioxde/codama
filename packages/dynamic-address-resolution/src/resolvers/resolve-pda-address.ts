@@ -15,6 +15,8 @@ import { isNode, visitOrElse } from 'codama';
 import type { AccountsInput, ArgumentsInput, ResolverFnInput, ResolversInput } from '../shared/types';
 import { getMaybeNodeKind } from '../shared/util';
 import { createPdaSeedValueVisitor, PDA_SEED_VALUE_SUPPORTED_NODE_KINDS } from '../visitors/pda-seed-value';
+import { tryResolveArgumentPathValue } from '../visitors/resolve-argument-path';
+import { resolveAccountValueNodeAddress } from './resolve-account-value-node-address';
 import type { BaseResolutionContext } from './types';
 
 export type ResolvePDAAddressContext<
@@ -51,10 +53,31 @@ export async function resolvePDAAddress<
     }
 
     const pdaNode = resolvePdaNode(pdaValueNode, root.program.pdas);
-    const programId = address(pdaNode.programId || root.program.publicKey);
+    // Priority: dynamic programId (cross-program PDA) > pdaNode constant > local program.
+    const runtimeProgramId = await resolveRuntimeProgramId(
+        pdaValueNode.programId,
+        ixNode,
+        accountsInput,
+        argumentsInput,
+        root,
+        resolutionPath,
+        resolversInput,
+    );
+    const programId = address(runtimeProgramId ?? pdaNode.programId ?? root.program.publicKey);
+
+    // Pair variable seeds to values by name; duplicate-named seeds are consumed in order.
+    const valuesByName = new Map<string, PdaSeedValueNode[]>();
+    for (const seedValue of pdaValueNode.seeds) {
+        const bucket = valuesByName.get(seedValue.name);
+        if (bucket) bucket.push(seedValue);
+        else valuesByName.set(seedValue.name, [seedValue]);
+    }
+    const pairedSeedValues = pdaNode.seeds.map(seedNode =>
+        seedNode.kind === 'variablePdaSeedNode' ? valuesByName.get(seedNode.name)?.shift() : undefined,
+    );
 
     const seedValues = await Promise.all(
-        pdaNode.seeds.map(async seedNode => {
+        pdaNode.seeds.map(async (seedNode, index) => {
             if (seedNode.kind === 'constantPdaSeedNode') {
                 return await resolveConstantPdaSeed({
                     accountsInput,
@@ -69,14 +92,18 @@ export async function resolvePDAAddress<
             }
 
             if (seedNode.kind === 'variablePdaSeedNode') {
-                const variableSeedValueNodes = pdaValueNode.seeds;
-                const seedName = seedNode.name;
-                const variableSeedValueNode = variableSeedValueNodes.find(node => node.name === seedName);
+                const variableSeedValueNode = pairedSeedValues[index];
 
                 if (!variableSeedValueNode) {
+                    // Drained bucket = value count mismatch; missing bucket = no reference.
+                    if (valuesByName.has(seedNode.name)) {
+                        throw new CodamaError(CODAMA_ERROR__DYNAMIC_CLIENT__INVARIANT_VIOLATION, {
+                            message: `PDA seed "${seedNode.name}" at position ${index} of [${ixNode.name}] had no supplied value; duplicate-named seeds exhausted the bucket.`,
+                        });
+                    }
                     throw new CodamaError(CODAMA_ERROR__DYNAMIC_CLIENT__NODE_REFERENCE_NOT_FOUND, {
                         instructionName: ixNode.name,
-                        referencedName: seedName,
+                        referencedName: seedNode.name,
                     });
                 }
 
@@ -162,13 +189,6 @@ function resolveVariablePdaSeed<
         });
     }
 
-    if (seedNode.name !== variableSeedValueNode.name) {
-        // Sanity check: this should not happen.
-        throw new CodamaError(CODAMA_ERROR__DYNAMIC_CLIENT__INVARIANT_VIOLATION, {
-            message: `Mismatched PDA seed names: expected [${seedNode.name}], got [${variableSeedValueNode.name}]`,
-        });
-    }
-
     const visitor = createPdaSeedValueVisitor({
         accountsInput,
         argumentsInput,
@@ -236,4 +256,39 @@ function resolveConstantPdaSeed<
             node,
         });
     });
+}
+
+async function resolveRuntimeProgramId(
+    programIdRef: PdaValueNode['programId'],
+    ixNode: ResolvePDAAddressContext['ixNode'],
+    accountsInput: ResolvePDAAddressContext['accountsInput'],
+    argumentsInput: ResolvePDAAddressContext['argumentsInput'],
+    root: ResolvePDAAddressContext['root'],
+    resolutionPath: ResolvePDAAddressContext['resolutionPath'],
+    resolversInput: ResolvePDAAddressContext['resolversInput'],
+): Promise<string | undefined> {
+    if (!programIdRef) return undefined;
+    if (isNode(programIdRef, 'accountValueNode')) {
+        const resolved = await resolveAccountValueNodeAddress(programIdRef, {
+            accountsInput: accountsInput ?? {},
+            argumentsInput: argumentsInput ?? {},
+            ixNode,
+            resolutionPath,
+            resolversInput,
+            root,
+        });
+        return resolved ?? undefined;
+    }
+    if (isNode(programIdRef, 'argumentValueNode')) {
+        const rootArg = argumentsInput?.[programIdRef.name];
+        // The dynamic programId is an optional override; an unresolved arg falls back to the pdaNode
+        // constant / local program (see the caller's `?? pdaNode.programId ?? ...`). Resolve leniently
+        // so a missing nested arg returns undefined instead of aborting derivation.
+        const value =
+            programIdRef.path && programIdRef.path.length > 0
+                ? tryResolveArgumentPathValue(rootArg, programIdRef.path)
+                : rootArg;
+        return typeof value === 'string' ? value : undefined;
+    }
+    return undefined;
 }

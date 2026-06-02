@@ -578,7 +578,13 @@ export function identityVisitor<TNodeKind extends NodeKind = NodeKind>(
             if (pda === null) return null;
             assertIsNode(pda, ['pdaLinkNode', 'pdaNode']);
             const seeds = node.seeds.map(visit(this)).filter(removeNullAndAssertIsNodeFilter('pdaSeedValueNode'));
-            return pdaValueNode(pda, seeds);
+            // programId is a runtime program ref (dynamic-programId PDA); if it visits to null
+            // the wrapper can no longer resolve, so cascade null rather than emit a broken PDA.
+            if (!node.programId) return pdaValueNode(pda, seeds);
+            const programId = visit(this)(node.programId);
+            if (programId === null) return null;
+            assertIsNode(programId, ['accountValueNode', 'argumentValueNode']);
+            return pdaValueNode(pda, seeds, programId);
         };
     }
 

@@ -30,6 +30,7 @@ import {
     CODAMA_ERROR__DYNAMIC_CLIENT__INVARIANT_VIOLATION,
     CODAMA_ERROR__DYNAMIC_CLIENT__NODE_REFERENCE_NOT_FOUND,
     CODAMA_ERROR__DYNAMIC_CLIENT__PDA_NOT_FOUND,
+    CODAMA_ERROR__DYNAMIC_CLIENT__PDA_REQUIRES_PROGRAM_ADDRESS,
     CODAMA_ERROR__DYNAMIC_CLIENT__UNEXPECTED_ADDRESS_TYPE,
     CODAMA_ERROR__DYNAMIC_CLIENT__UNEXPECTED_ARGUMENT_TYPE,
     CODAMA_ERROR__DYNAMIC_CLIENT__UNSUPPORTED_NODE,
@@ -105,6 +106,8 @@ export const CodamaErrorMessages: Readonly<{
     [CODAMA_ERROR__DYNAMIC_CLIENT__NODE_REFERENCE_NOT_FOUND]:
         'Referenced node [$referencedName] not found in [$instructionName].',
     [CODAMA_ERROR__DYNAMIC_CLIENT__PDA_NOT_FOUND]: 'PDA [$pdaName] not found in IDL. Available: [$available].',
+    [CODAMA_ERROR__DYNAMIC_CLIENT__PDA_REQUIRES_PROGRAM_ADDRESS]:
+        'PDA [$pdaName] has a dynamic programId; pass config.programAddress to deriveStandalonePDA.',
 
     [CODAMA_ERROR__DYNAMIC_CLIENT__UNEXPECTED_ADDRESS_TYPE]:
         'Expected [$expectedType] for account [$accountName], but received [$actualType].',

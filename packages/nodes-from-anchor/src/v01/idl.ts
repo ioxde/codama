@@ -205,6 +205,7 @@ export type IdlV01Type =
     | IdlV01TypeArray
     | IdlV01TypeCOption
     | IdlV01TypeDefined
+    | IdlV01TypeDefTyStruct
     | IdlV01TypeGeneric
     | IdlV01TypeNumber
     | IdlV01TypeOption

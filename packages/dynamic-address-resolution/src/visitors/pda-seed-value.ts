@@ -90,7 +90,9 @@ export function createPdaSeedValueVisitor(
         },
 
         visitArgumentValue: async (node: ArgumentValueNode) => {
-            const ixArgumentNode = ixNode.arguments.find(arg => arg.name === node.name);
+            // Resolve against both serialized arguments and unserialized extraArguments.
+            const allArguments = [...ixNode.arguments, ...(ixNode.extraArguments ?? [])];
+            const ixArgumentNode = allArguments.find(arg => arg.name === node.name);
             if (!ixArgumentNode) {
                 throw new CodamaError(CODAMA_ERROR__DYNAMIC_CLIENT__NODE_REFERENCE_NOT_FOUND, {
                     instructionName: ixNode.name,

@@ -16,9 +16,13 @@ import { isOmittedArgument } from './shared';
  * Optional validation allows undefined so custom resolvers will fill default values after validation.
  */
 export function createArgumentsInputValidator(root: RootNode, ixNode: InstructionNode) {
-    const requiredArguments = ixNode.arguments.filter(arg => arg?.defaultValueStrategy !== 'omitted');
+    // extraArguments are optional here; requiredness depends on accountsInput, which only the builder sees.
+    const dataArguments = ixNode.arguments.filter(arg => arg?.defaultValueStrategy !== 'omitted');
+    const extraArguments = ixNode.extraArguments ?? [];
+    const requiredArguments = [...dataArguments, ...extraArguments];
+    const optionalArgumentNames = new Set(extraArguments.map(a => a.name));
     const validator = requiredArguments.length
-        ? createIxArgumentsValidator(ixNode.name, requiredArguments, root.program.definedTypes)
+        ? createIxArgumentsValidator(ixNode.name, requiredArguments, root.program.definedTypes, optionalArgumentNames)
         : null;
 
     return (argumentsInput: ArgumentsInput = {}) => {

@@ -97,6 +97,9 @@ importers:
         specifier: workspace:*
         version: link:../library
     devDependencies:
+      '@codama/nodes-from-anchor':
+        specifier: workspace:*
+        version: link:../nodes-from-anchor
       '@solana/kit':
         specifier: 6.5.0
         version: 6.5.0(bufferutil@4.1.0)(fastestsmallesttextencoderdecoder@1.0.22)(typescript@5.9.3)(utf-8-validate@6.0.6)

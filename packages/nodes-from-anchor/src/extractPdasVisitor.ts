@@ -60,6 +60,7 @@ export function extractPdasFromProgram(program: ProgramNode): ProgramNode {
                 return account;
             }
 
+            // Static cross-program PDAs stay inline. Dynamic-programId PDAs lift; the ref stays on the wrapper.
             const pda = account.defaultValue.pda;
             if (pda.programId && pda.programId !== program.publicKey) return account;
 

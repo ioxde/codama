@@ -4,10 +4,11 @@ import type {
     InstructionAccountNode,
     InstructionInputValueNode,
     InstructionNode,
-    PdaNode,
     RootNode,
     TypeNode,
 } from 'codama';
+
+import { collectPdaNodes } from '../../../program-client/collect-pdas';
 
 /**
  * Generate TypeScript type for program client.
@@ -16,7 +17,7 @@ export function generateClientTypes(idl: RootNode): string {
     const programName = toPascalCase(idl.program.name);
     const definedTypes = idl.program.definedTypes ?? [];
 
-    const pdaMap = collectPdaNodesFromIdl(idl);
+    const pdaMap = collectPdaNodes(idl);
 
     const hasPdas = pdaMap.size > 0;
     const addressImports = hasPdas ? 'Address, ProgramDerivedAddress' : 'Address';
@@ -142,7 +143,7 @@ export type ${programName}Methods = {\n`;
 
     // Generate PDA seed types and pdas namespace
     if (pdaMap.size > 0) {
-        for (const [pdaName, pdaNode] of pdaMap) {
+        for (const [pdaName, { pdaNode }] of pdaMap) {
             const typeName = toPascalCase(pdaName);
             const variableSeeds = (pdaNode.seeds ?? []).filter(s => s.kind === 'variablePdaSeedNode');
             if (variableSeeds.length > 0) {
@@ -157,12 +158,13 @@ export type ${programName}Methods = {\n`;
 
         output += `/**\n * Strongly-typed PDAs for ${programName}.\n */\n`;
         output += `export type ${programName}Pdas = {\n`;
-        for (const [pdaName, pdaNode] of pdaMap) {
+        for (const [pdaName, { pdaNode, requiresProgramAddress }] of pdaMap) {
             const typeName = toPascalCase(pdaName);
             const variableSeeds = (pdaNode.seeds ?? []).filter(s => s.kind === 'variablePdaSeedNode');
             const seedsParam =
                 variableSeeds.length > 0 ? `seeds: ${typeName}PdaSeeds` : `seeds?: Record<string, unknown>`;
-            output += `    ${pdaName}: (${seedsParam}) => Promise<ProgramDerivedAddress>;\n`;
+            const configParam = requiresProgramAddress ? `, config: { programAddress: Address }` : '';
+            output += `    ${pdaName}: (${seedsParam}${configParam}) => Promise<ProgramDerivedAddress>;\n`;
         }
         output += '};\n\n';
     }
@@ -274,27 +276,6 @@ function codamaTypeToTS(type: TypeNode | undefined, definedTypes: DefinedTypeNod
             type['kind'] satisfies never;
             return 'unknown';
     }
-}
-
-function collectPdaNodesFromIdl(idl: RootNode): Map<string, PdaNode> {
-    const pdas = new Map<string, PdaNode>();
-
-    for (const pda of idl.program.pdas ?? []) {
-        pdas.set(pda.name, pda);
-    }
-
-    for (const ix of idl.program.instructions) {
-        for (const acc of ix.accounts) {
-            if (!acc.defaultValue || acc.defaultValue.kind !== 'pdaValueNode') continue;
-            const pdaDef = acc.defaultValue.pda;
-            if (!pdaDef || pdaDef.kind !== 'pdaNode') continue;
-            if (!pdas.has(pdaDef.name)) {
-                pdas.set(pdaDef.name, pdaDef);
-            }
-        }
-    }
-
-    return pdas;
 }
 
 /**

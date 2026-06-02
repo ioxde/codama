@@ -1,5 +1,6 @@
 // Resolvers
 export { resolveInstructionAccountAddress, resolveStandalonePda } from './resolvers';
+export type { StandalonePdaConfig } from './resolvers';
 
 // Visitors
 export {

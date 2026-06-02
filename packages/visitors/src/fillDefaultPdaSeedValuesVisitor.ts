@@ -12,6 +12,7 @@ import {
     PdaNode,
     PdaSeedValueNode,
     pdaSeedValueNode,
+    PdaValueNode,
     pdaValueNode,
 } from '@codama/nodes';
 import {
@@ -60,10 +61,10 @@ export function fillDefaultPdaSeedValuesVisitor(
                         pdaName: foundPda.name,
                     });
                 }
-                return pdaValueNode(visitedNode.pda, seeds);
+                return pdaValueNode(visitedNode.pda, seeds, visitedNode.programId);
             },
         }),
-    ) as Visitor<InstructionInputValueNode, InstructionInputValueNode['kind']>;
+    ) as Visitor<PdaValueNode, InstructionInputValueNode['kind']>;
 }
 
 function addDefaultSeedValuesFromPdaWhenMissing(
@@ -105,6 +106,7 @@ function allSeedsAreValid(instruction: InstructionNode, foundPda: PdaNode, seeds
             return allAccountsName.includes(seed.value.name);
         }
         if (isNode(seed.value, 'argumentValueNode')) {
+            // #992 convention: `name` is the root arg (sub-path lives in `path`).
             return allArgumentsName.includes(seed.value.name);
         }
         return true;

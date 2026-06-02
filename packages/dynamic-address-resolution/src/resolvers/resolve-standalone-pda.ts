@@ -12,11 +12,17 @@ import type { ReadonlyUint8Array } from '@solana/codecs';
 import type { InstructionNode, PdaNode, RegisteredPdaSeedNode, RootNode, VariablePdaSeedNode } from 'codama';
 import { camelCase, isNode, visitOrElse } from 'codama';
 
+import type { AddressInput } from '../shared/address';
 import { toAddress } from '../shared/address';
 import { getMemoizedUtf8Encoder } from '../shared/codecs';
 import { formatValueType, getMaybeNodeKind } from '../shared/util';
 import { createCodecInputTransformer } from '../visitors/codec-input-transformer';
 import { createPdaSeedValueVisitor, PDA_SEED_VALUE_SUPPORTED_NODE_KINDS } from '../visitors/pda-seed-value';
+
+export type StandalonePdaConfig = {
+    /** Required for PDAs with a dynamic programId. */
+    programAddress?: AddressInput;
+};
 
 /**
  * Minimal InstructionNode stub to satisfy constant PDA seeds requirements.
@@ -37,8 +43,9 @@ export async function resolveStandalonePda(
     root: RootNode,
     pdaNode: PdaNode,
     seedInputs: Record<string, unknown> = {},
+    config: StandalonePdaConfig = {},
 ): Promise<ProgramDerivedAddress> {
-    const programAddress = toAddress(pdaNode.programId || root.program.publicKey);
+    const programAddress = toAddress(config.programAddress ?? pdaNode.programId ?? root.program.publicKey);
     const seedValues = await Promise.all(
         pdaNode.seeds.map(async (seedNode): Promise<ReadonlyUint8Array> => {
             if (seedNode.kind === 'constantPdaSeedNode') {

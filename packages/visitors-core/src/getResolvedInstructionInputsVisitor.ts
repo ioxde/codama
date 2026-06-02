@@ -237,15 +237,20 @@ export function getResolvedInstructionInputsVisitor(
 
 export function deduplicateInstructionDependencies(dependencies: InstructionDependency[]): InstructionDependency[] {
     const accounts = new Map<CamelCaseString, InstructionDependency>();
-    const args = new Map<CamelCaseString, InstructionDependency>();
+    const args = new Map<string, InstructionDependency>();
     dependencies.forEach(dependency => {
         if (isNode(dependency, 'accountValueNode')) {
             accounts.set(dependency.name, dependency);
         } else if (isNode(dependency, 'argumentValueNode')) {
-            args.set(dependency.name, dependency);
+            args.set(argumentDependencyKey(dependency), dependency);
         }
     });
     return [...accounts.values(), ...args.values()];
+}
+
+// Full reference = root `name` + dotted sub-path, so distinct field refs of one arg stay distinct.
+function argumentDependencyKey(node: ArgumentValueNode): string {
+    return node.path && node.path.length > 0 ? `${node.name}.${node.path.join('.')}` : node.name;
 }
 
 export function getInstructionDependencies(input: InstructionInput | InstructionNode): InstructionDependency[] {
@@ -273,10 +278,12 @@ export function getInstructionDependencies(input: InstructionInput | Instruction
     }
 
     if (isNode(input.defaultValue, 'pdaValueNode')) {
-        const dependencies = new Map<CamelCaseString, InstructionDependency>();
+        const dependencies = new Map<string, InstructionDependency>();
         input.defaultValue.seeds.forEach(seed => {
-            if (isNode(seed.value, ['accountValueNode', 'argumentValueNode'])) {
+            if (isNode(seed.value, 'accountValueNode')) {
                 dependencies.set(seed.value.name, { ...seed.value });
+            } else if (isNode(seed.value, 'argumentValueNode')) {
+                dependencies.set(argumentDependencyKey(seed.value), { ...seed.value });
             }
         });
         return <InstructionDependency[]>[

@@ -18,6 +18,7 @@ import {
     intersection,
     number,
     object,
+    optional,
     size,
     string,
     Struct,
@@ -45,21 +46,27 @@ export function createIxAccountsValidator(ixAccountNodes: InstructionAccountNode
 
 /**
  * Creates a superstruct validator for instruction InstructionArgumentNodes.
+ *
+ * Arguments whose names appear in `optionalArgumentNames` are validated only when supplied.
  */
 export function createIxArgumentsValidator(
     ixNodeName: string,
     ixArgumentNodes: InstructionArgumentNode[],
     definedTypes: DefinedTypeNode[],
+    optionalArgumentNames: ReadonlySet<string> = new Set(),
 ): StructUnknown {
     const shape = ixArgumentNodes.reduce<Record<string, StructUnknown>>((acc, argumentNode, index) => {
         if (!argumentNode.type) {
             throw new Error(`Argument ${argumentNode.name} of instruction ${ixNodeName} does not have a type`);
         }
-        acc[argumentNode.name] = createValidatorForTypeNode(
+        const valueValidator = createValidatorForTypeNode(
             `${ixNodeName}_${argumentNode.name}_${index}`,
             argumentNode.type,
             definedTypes,
         );
+        acc[argumentNode.name] = optionalArgumentNames.has(argumentNode.name)
+            ? (optional(valueValidator) as StructUnknown)
+            : valueValidator;
         return acc;
     }, {});
     return object(shape) as StructUnknown;

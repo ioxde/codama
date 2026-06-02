@@ -42,6 +42,7 @@ import {
     assertIsFixedSize,
     Codec,
     createCodec,
+    Endian,
     fixCodecSize,
     getArrayCodec,
     getBase16Codec,
@@ -258,7 +259,7 @@ export function getNodeCodecVisitor(
             ) as Codec<unknown>;
         },
         visitNumberType(node) {
-            return getCodecFromNumberFormat(node.format) as Codec<unknown>;
+            return getCodecFromNumberFormat(node.format, node.endian) as Codec<unknown>;
         },
         visitOptionType(node) {
             const item = visit(node.item, this);
@@ -375,32 +376,34 @@ function getCodecFromBytesEncoding(encoding: BytesEncoding) {
     }
 }
 
-function getCodecFromNumberFormat(format: NumberFormat) {
+// Multi-byte int/float codecs honor node.endian; u8/i8 and shortU16 have no byte order.
+function getCodecFromNumberFormat(format: NumberFormat, endian: 'be' | 'le' = 'le') {
+    const config = { endian: endian === 'be' ? Endian.Big : Endian.Little };
     switch (format) {
         case 'u8':
             return getU8Codec();
         case 'u16':
-            return getU16Codec();
+            return getU16Codec(config);
         case 'u32':
-            return getU32Codec();
+            return getU32Codec(config);
         case 'u64':
-            return getU64Codec();
+            return getU64Codec(config);
         case 'u128':
-            return getU128Codec();
+            return getU128Codec(config);
         case 'i8':
             return getI8Codec();
         case 'i16':
-            return getI16Codec();
+            return getI16Codec(config);
         case 'i32':
-            return getI32Codec();
+            return getI32Codec(config);
         case 'i64':
-            return getI64Codec();
+            return getI64Codec(config);
         case 'i128':
-            return getI128Codec();
+            return getI128Codec(config);
         case 'f32':
-            return getF32Codec();
+            return getF32Codec(config);
         case 'f64':
-            return getF64Codec();
+            return getF64Codec(config);
         case 'shortU16':
             return getShortU16Codec();
         default:

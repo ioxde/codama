@@ -4,11 +4,13 @@ import {
     type ArgumentsInput,
     type ResolversInput,
     resolveStandalonePda,
+    type StandalonePdaConfig,
     toAddress,
 } from '@codama/dynamic-address-resolution';
 import {
     CODAMA_ERROR__DYNAMIC_CLIENT__INSTRUCTION_NOT_FOUND,
     CODAMA_ERROR__DYNAMIC_CLIENT__PDA_NOT_FOUND,
+    CODAMA_ERROR__DYNAMIC_CLIENT__PDA_REQUIRES_PROGRAM_ADDRESS,
     CodamaError,
 } from '@codama/errors';
 import { type Address, address, type ProgramDerivedAddress } from '@solana/addresses';
@@ -35,7 +37,10 @@ export type ProgramClient = {
     /** Anchor-like facade namespace for building instructions. */
     methods: Record<string, (args?: ArgumentsInput) => ProgramMethodBuilder>;
     /** Anchor-like facade namespace for standalone PDA derivation. */
-    pdas?: Record<string, (seeds?: Record<string, unknown>) => Promise<ProgramDerivedAddress>>;
+    pdas?: Record<
+        string,
+        (seeds?: Record<string, unknown>, config?: StandalonePdaConfig) => Promise<ProgramDerivedAddress>
+    >;
     /** Program id as an `Address`. */
     programAddress: Address;
     /** Parsed Codama root node for advanced use-cases. */
@@ -113,8 +118,8 @@ export function createProgramClient<TClient = ProgramClient>(
                       get(_target, prop) {
                           if (typeof prop !== 'string' || PASSTHROUGH_PROPS.has(prop)) return undefined;
 
-                          const pdaNode = pdaNodes.get(prop);
-                          if (!pdaNode) {
+                          const entry = pdaNodes.get(prop);
+                          if (!entry) {
                               if (prop in Object.prototype) return undefined;
                               const available = [...pdaNodes.keys()].join(', ');
                               throw new CodamaError(CODAMA_ERROR__DYNAMIC_CLIENT__PDA_NOT_FOUND, {
@@ -123,7 +128,14 @@ export function createProgramClient<TClient = ProgramClient>(
                               });
                           }
 
-                          return (seeds?: Record<string, unknown>) => resolveStandalonePda(root, pdaNode, seeds);
+                          return (seeds?: Record<string, unknown>, config?: StandalonePdaConfig) => {
+                              if (entry.requiresProgramAddress && !config?.programAddress) {
+                                  throw new CodamaError(CODAMA_ERROR__DYNAMIC_CLIENT__PDA_REQUIRES_PROGRAM_ADDRESS, {
+                                      pdaName: prop,
+                                  });
+                              }
+                              return resolveStandalonePda(root, entry.pdaNode, seeds, config);
+                          };
                       },
                       has(target, prop) {
                           return Reflect.has(target, prop) || (typeof prop === 'string' && pdaNodes.has(prop));

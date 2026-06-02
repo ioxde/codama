@@ -20,8 +20,9 @@ function pathSuffix(path: readonly CamelCaseString[]): string {
 
 /**
  * Walks `path` through a top-level instruction-arg type to the leaf field's typeNode.
- * Descends through structTypeNode fields and resolves definedTypeLinkNode along the way.
- * Throws INVARIANT_VIOLATION if the path doesn't resolve through a struct field.
+ * Descends through structTypeNode fields (by name) and tupleTypeNode items (by numeric index),
+ * resolving definedTypeLinkNode along the way.
+ * Throws INVARIANT_VIOLATION if the path doesn't resolve through a struct field or tuple item.
  */
 export function resolveArgumentPathType(
     rootType: TypeNode,
@@ -33,19 +34,31 @@ export function resolveArgumentPathType(
     const visited: CamelCaseString[] = [];
     for (const segment of path) {
         current = unwrapDefinedTypeLink(current, root);
-        if (!isNode(current, 'structTypeNode')) {
-            throw new CodamaError(CODAMA_ERROR__DYNAMIC_CLIENT__INVARIANT_VIOLATION, {
-                message: `Cannot walk argument path "${argumentName}${pathSuffix([...visited, segment])}": expected structTypeNode at "${argumentName}${pathSuffix(visited)}", got ${current.kind}.`,
-            });
+        if (isNode(current, 'structTypeNode')) {
+            const field = current.fields.find(f => f.name === segment);
+            if (!field) {
+                throw new CodamaError(CODAMA_ERROR__DYNAMIC_CLIENT__INVARIANT_VIOLATION, {
+                    message: `Argument path "${argumentName}${pathSuffix([...visited, segment])}" does not exist: struct has no field "${segment}".`,
+                });
+            }
+            current = field.type;
+            visited.push(segment);
+            continue;
         }
-        const field = current.fields.find(f => f.name === segment);
-        if (!field) {
-            throw new CodamaError(CODAMA_ERROR__DYNAMIC_CLIENT__INVARIANT_VIOLATION, {
-                message: `Argument path "${argumentName}${pathSuffix([...visited, segment])}" does not exist: struct has no field "${segment}".`,
-            });
+        if (isNode(current, 'tupleTypeNode')) {
+            const index = Number(segment);
+            if (!Number.isInteger(index) || index < 0 || index >= current.items.length) {
+                throw new CodamaError(CODAMA_ERROR__DYNAMIC_CLIENT__INVARIANT_VIOLATION, {
+                    message: `Argument path "${argumentName}${pathSuffix([...visited, segment])}" does not exist: tuple has no item at index "${segment}".`,
+                });
+            }
+            current = current.items[index];
+            visited.push(segment);
+            continue;
         }
-        current = field.type;
-        visited.push(segment);
+        throw new CodamaError(CODAMA_ERROR__DYNAMIC_CLIENT__INVARIANT_VIOLATION, {
+            message: `Cannot walk argument path "${argumentName}${pathSuffix([...visited, segment])}": expected structTypeNode or tupleTypeNode at "${argumentName}${pathSuffix(visited)}", got ${current.kind}.`,
+        });
     }
     return current;
 }
@@ -57,7 +70,13 @@ export function resolveArgumentPathType(
  */
 type ArgumentPathWalk =
     | {
-          readonly kind: 'notObject';
+          readonly array: readonly unknown[];
+          readonly index: number;
+          readonly kind: 'outOfBounds';
+          readonly visited: readonly CamelCaseString[];
+      }
+    | {
+          readonly kind: 'notIndexable';
           readonly segment: CamelCaseString;
           readonly value: unknown;
           readonly visited: readonly CamelCaseString[];
@@ -66,8 +85,9 @@ type ArgumentPathWalk =
     | { readonly kind: 'resolved'; readonly value: unknown };
 
 /**
- * Walks `path` through an argument value, descending into struct fields by name. Returns a result
- * instead of throwing so both resolvers below share one copy of the descent logic.
+ * Walks `path` through an argument value, descending into struct fields by name and tuple/array
+ * items by numeric index. Returns a result instead of throwing so both resolvers below share one
+ * copy of the descent logic.
  */
 function walkArgumentPathValue(rootValue: unknown, path: readonly CamelCaseString[]): ArgumentPathWalk {
     let current = rootValue;
@@ -76,10 +96,17 @@ function walkArgumentPathValue(rootValue: unknown, path: readonly CamelCaseStrin
         if (current === undefined || current === null) {
             return { kind: 'missing', visited: [...visited] };
         }
-        if (!isObjectRecord(current)) {
-            return { kind: 'notObject', segment, value: current, visited: [...visited] };
+        if (isObjectRecord(current)) {
+            current = current[segment];
+        } else if (Array.isArray(current)) {
+            const index = Number(segment);
+            if (!Number.isInteger(index) || index < 0 || index >= current.length) {
+                return { array: current, index, kind: 'outOfBounds', visited: [...visited] };
+            }
+            current = current[index];
+        } else {
+            return { kind: 'notIndexable', segment, value: current, visited: [...visited] };
         }
-        current = current[segment];
         visited.push(segment);
     }
     return { kind: 'resolved', value: current };
@@ -88,8 +115,9 @@ function walkArgumentPathValue(rootValue: unknown, path: readonly CamelCaseStrin
 /**
  * Resolves `path` to the leaf value where it's required (PDA seeds, account defaults). Throws
  * ARGUMENT_MISSING if an intermediate or leaf is absent, or INVALID_ARGUMENT_INPUT if a value's shape
- * contradicts the declared type (a primitive where a struct is expected). Both come from
- * caller-supplied `argumentsInput`, so they're user errors, not internal invariants.
+ * contradicts the declared type (a too-short tuple/array, or a primitive where a struct/tuple is
+ * expected). Both come from caller-supplied `argumentsInput`, so they're user errors, not internal
+ * invariants.
  */
 export function resolveArgumentPathValue(
     rootValue: unknown,
@@ -106,9 +134,16 @@ export function resolveArgumentPathValue(
             instructionName,
         });
     }
+    if (walk.kind === 'outOfBounds') {
+        throw new CodamaError(CODAMA_ERROR__DYNAMIC_CLIENT__INVALID_ARGUMENT_INPUT, {
+            argumentName,
+            expectedType: `an array with index ${walk.index} at "${argumentName}${pathSuffix(walk.visited)}"`,
+            value: safeStringify(walk.array),
+        });
+    }
     throw new CodamaError(CODAMA_ERROR__DYNAMIC_CLIENT__INVALID_ARGUMENT_INPUT, {
         argumentName,
-        expectedType: `an object at "${argumentName}${pathSuffix(walk.visited)}" to read "${walk.segment}"`,
+        expectedType: `an object or array at "${argumentName}${pathSuffix(walk.visited)}" to read "${walk.segment}"`,
         value: safeStringify(walk.value),
     });
 }
