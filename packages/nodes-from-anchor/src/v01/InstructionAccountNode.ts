@@ -4,6 +4,7 @@ import {
     ArgumentValueNode,
     argumentValueNode,
     camelCase,
+    constantPdaSeedNode,
     InstructionAccountNode,
     instructionAccountNode,
     InstructionArgumentNode,
@@ -14,6 +15,7 @@ import {
     pdaSeedValueNode,
     PdaValueNode,
     pdaValueNode,
+    publicKeyTypeNode,
     PublicKeyValueNode,
     publicKeyValueNode,
     variablePdaSeedNode,
@@ -97,7 +99,57 @@ export function instructionAccountNodesFromAnchorV01(
     idlTypes: IdlV01TypeDef[] = [],
     generics: GenericsV01 = { constArgs: {}, typeArgs: {}, types: {} },
 ): InstructionAccountNode[] {
-    return lowerInstructionAccountsV01(idl, instructionArguments, prefix, idlTypes, generics).map(l => l.node);
+    return stampPinnedAddresses(
+        lowerInstructionAccountsV01(idl, instructionArguments, prefix, idlTypes, generics).map(l => l.node),
+    );
+}
+
+// Anchor enforces `address` constraints on-chain, so refs to address-pinned siblings resolve statically:
+// `seeds::program` sets pdaNode.programId (the runtime ref is kept) and seed refs become constant seeds.
+export function stampPinnedAddresses(accounts: InstructionAccountNode[]): InstructionAccountNode[] {
+    const pinned = new Map<string, string>();
+    for (const account of accounts) {
+        if (isNode(account.defaultValue, 'publicKeyValueNode')) {
+            pinned.set(account.name, account.defaultValue.publicKey);
+        }
+    }
+    if (pinned.size === 0) return accounts;
+
+    return accounts.map(account => {
+        const dv = account.defaultValue;
+        if (!isNode(dv, 'pdaValueNode') || !isNode(dv.pda, 'pdaNode')) return account;
+        let pda = dv.pda;
+        let seeds = dv.seeds;
+
+        if (!pda.programId && isNode(dv.programId, 'accountValueNode')) {
+            const programId = pinned.get(dv.programId.name);
+            if (programId) pda = pdaNode({ ...pda, programId });
+        }
+
+        const pinnedSeeds = new Map<string, string>();
+        for (const seed of seeds) {
+            if (!isNode(seed.value, 'accountValueNode')) continue;
+            const address = pinned.get(seed.value.name);
+            if (address) pinnedSeeds.set(seed.name, address);
+        }
+        if (pinnedSeeds.size > 0) {
+            const baked = new Set<string>();
+            const definitionSeeds = pda.seeds.map(seed => {
+                if (!isNode(seed, 'variablePdaSeedNode')) return seed;
+                const address = pinnedSeeds.get(seed.name);
+                if (!address) return seed;
+                baked.add(seed.name);
+                return constantPdaSeedNode(publicKeyTypeNode(), publicKeyValueNode(address));
+            });
+            if (baked.size > 0) {
+                pda = pdaNode({ ...pda, seeds: definitionSeeds });
+                seeds = seeds.filter(seed => !baked.has(seed.name));
+            }
+        }
+
+        if (pda === dv.pda) return account;
+        return instructionAccountNode({ ...account, defaultValue: pdaValueNode(pda, seeds, dv.programId) });
+    });
 }
 
 export function instructionAccountNodeFromAnchorV01(

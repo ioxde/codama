@@ -2,6 +2,7 @@ import {
     accountValueNode,
     argumentValueNode,
     assertIsNode,
+    constantPdaSeedNode,
     constantPdaSeedNodeFromBytes,
     definedTypeLinkNode,
     type InstructionAccountNode,
@@ -600,8 +601,9 @@ test('it lifts a PDA whose program is a bare account ref by carrying it on pdaVa
         [],
     );
 
+    // The sibling's `address` constraint sets pda.programId; the runtime ref stays on the pdaValueNode.
     const dv = liftedPda(nodes.find(n => n.name === 'x'));
-    expect(dv.pda.programId).toBeUndefined();
+    expect(dv.pda.programId).toBe('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA');
     expect(dv.programId).toEqual(accountValueNode('tokenProgram'));
 });
 
@@ -966,7 +968,7 @@ test('it bakes an arbitrary const program address into pdaNode.programId', () =>
     expect(dv.programId).toBeUndefined();
 });
 
-test('it carries an account-ref program as a symbolic ref, not the fixed address', () => {
+test('it stamps the fixed address of an account-ref program and keeps the symbolic ref', () => {
     const nodes = instructionAccountNodesFromAnchorV01(
         [
             { address: ARBITRARY_PROGRAM_B, name: 'someProgram' },
@@ -982,11 +984,56 @@ test('it carries an account-ref program as a symbolic ref, not the fixed address
         ],
         [],
     );
-    // The account carries an `address`, but codama keeps the symbolic ref so the resolver looks it
-    // up at call time -- fixed addresses must not be statically baked in.
+    // Anchor enforces the `address` constraint on-chain, so the fixed address is set on the
+    // pdaNode. The symbolic ref stays on the pdaValueNode for runtime resolution.
     const dv = liftedPda(nodes.find(n => n.name === 'derived'));
-    expect(dv.pda.programId).toBeUndefined();
+    expect(dv.pda.programId).toBe(ARBITRARY_PROGRAM_B);
     expect(dv.programId).toEqual(accountValueNode('someProgram'));
+});
+
+test('it bakes an account-ref seed of an address-constrained sibling as a constant seed', () => {
+    const nodes = instructionAccountNodesFromAnchorV01(
+        [
+            { address: ARBITRARY_PROGRAM_B, name: 'someProgram' },
+            { name: 'owner' },
+            {
+                name: 'derived',
+                pda: {
+                    seeds: [
+                        { kind: 'account', path: 'someProgram' },
+                        { kind: 'account', path: 'owner' },
+                    ],
+                },
+                signer: false,
+                writable: false,
+            },
+        ],
+        [],
+    );
+    const dv = liftedPda(nodes.find(n => n.name === 'derived'));
+    // The pinned sibling becomes a constant seed; the unpinned seed stays variable.
+    expect(dv.pda.seeds[0]).toEqual(constantPdaSeedNode(publicKeyTypeNode(), publicKeyValueNode(ARBITRARY_PROGRAM_B)));
+    expect(dv.pda.seeds[1]).toEqual(variablePdaSeedNode('owner', publicKeyTypeNode()));
+    // The use-site value for the baked seed is dropped; the variable one remains.
+    expect(dv.seeds).toEqual([pdaSeedValueNode('owner', accountValueNode('owner'))]);
+});
+
+test('it keeps an account-ref seed variable when the sibling has no address constraint', () => {
+    const nodes = instructionAccountNodesFromAnchorV01(
+        [
+            { name: 'someProgram' },
+            {
+                name: 'derived',
+                pda: { seeds: [{ kind: 'account', path: 'someProgram' }] },
+                signer: false,
+                writable: false,
+            },
+        ],
+        [],
+    );
+    const dv = liftedPda(nodes.find(n => n.name === 'derived'));
+    expect(dv.pda.seeds[0]).toEqual(variablePdaSeedNode('someProgram', publicKeyTypeNode()));
+    expect(dv.seeds).toEqual([pdaSeedValueNode('someProgram', accountValueNode('someProgram'))]);
 });
 
 test('instructionAccountNodeFromAnchorV01 (singular API) lifts a foreign-program PDA via the same path', () => {

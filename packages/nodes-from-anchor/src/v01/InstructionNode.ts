@@ -22,6 +22,7 @@ import {
     LoweredInstructionAccountV01,
     lowerInstructionAccountsV01,
     minimalDistinctSuffixNames,
+    stampPinnedAddresses,
 } from './InstructionAccountNode';
 import { instructionArgumentNodeFromAnchorV01 } from './InstructionArgumentNode';
 import { seedLeafName } from './PdaSeedNode';
@@ -46,7 +47,7 @@ export function instructionNodeFromAnchorV01(
 
     const lowered = lowerInstructionAccountsV01(idl.accounts ?? [], dataArguments, undefined, idlTypes, generics);
     const argumentNames = new Set(dataArguments.map(arg => arg.name));
-    const accounts = disambiguateCrossPdaSeedInputs(lowered, idl.accounts ?? [], argumentNames);
+    const accounts = stampPinnedAddresses(disambiguateCrossPdaSeedInputs(lowered, idl.accounts ?? [], argumentNames));
     const extraArguments = collectExtraArguments(accounts, argumentNames);
 
     return instructionNode({

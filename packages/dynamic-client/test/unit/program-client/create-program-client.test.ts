@@ -1,5 +1,6 @@
 import { CodamaError } from '@codama/errors';
-import { address } from '@solana/addresses';
+import { type IdlV01, rootNodeFromAnchor } from '@codama/nodes-from-anchor';
+import { address, getAddressEncoder, getProgramDerivedAddress } from '@solana/addresses';
 import { describe, expect, test } from 'vitest';
 
 import { createProgramClient } from '../../../src';
@@ -145,6 +146,109 @@ describe('createProgramClient', () => {
 
         test('should not throw when serialized with JSON.stringify', () => {
             expect(() => JSON.stringify(pdaClient.pdas)).not.toThrow();
+        });
+    });
+
+    describe('pinned-program PDAs', () => {
+        const AMM_PROGRAM = '675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8';
+        // Raydium V4 authority: findProgramAddress(["amm authority"], AMM_PROGRAM).
+        const AMM_AUTHORITY = '5Q544fKrFoe6tsEbD7S8EmxGTJYAKtTVhAW5Q5pge4j1';
+
+        // Raydium-launchpad shape: amm_authority is a PDA of the address-pinned amm_program.
+        const pinnedIdl: IdlV01 = {
+            address: 'LanMV9sAd7wArD4vJFi2qDdfnVhFxYSUg6eADduJ3uj',
+            instructions: [
+                {
+                    accounts: [
+                        {
+                            name: 'amm_authority',
+                            pda: {
+                                program: { kind: 'account', path: 'amm_program' },
+                                // utf8 "amm authority"
+                                seeds: [
+                                    {
+                                        kind: 'const',
+                                        value: [97, 109, 109, 32, 97, 117, 116, 104, 111, 114, 105, 116, 121],
+                                    },
+                                ],
+                            },
+                        },
+                        { address: AMM_PROGRAM, name: 'amm_program' },
+                    ],
+                    args: [],
+                    discriminator: [1, 2, 3, 4, 5, 6, 7, 8],
+                    name: 'migrate_to_amm',
+                },
+            ],
+            metadata: { name: 'raydium_launchpad', spec: '0.1.0', version: '1.0.0' },
+        };
+
+        const client = createProgramClient(rootNodeFromAnchor(pinnedIdl));
+
+        test('should derive a pinned PDA without a programAddress config', async () => {
+            const [pdaAddress] = await client.pdas!.ammAuthority();
+            expect(pdaAddress).toBe(AMM_AUTHORITY);
+        });
+
+        test('should still honor a programAddress override over the pin', async () => {
+            const otherProgram = address('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA');
+            const [expected] = await getProgramDerivedAddress({
+                programAddress: otherProgram,
+                seeds: ['amm authority'],
+            });
+            const [pdaAddress] = await client.pdas!.ammAuthority({}, { programAddress: otherProgram });
+            expect(pdaAddress).toBe(expected);
+        });
+
+        test('should derive a PDA whose only seed is a pinned sibling account with zero inputs', async () => {
+            const BPF_LOADER = address('BPFLoaderUpgradeab1e11111111111111111111111');
+            const ownAddress = address('LanMV9sAd7wArD4vJFi2qDdfnVhFxYSUg6eADduJ3uj');
+            // send_nexus shape: program_data is the BPF-loader PDA of the address-pinned `program` account.
+            const programDataIdl: IdlV01 = {
+                ...pinnedIdl,
+                instructions: [
+                    {
+                        ...pinnedIdl.instructions[0],
+                        accounts: [
+                            { address: ownAddress, name: 'program' },
+                            {
+                                name: 'program_data',
+                                pda: {
+                                    program: {
+                                        kind: 'const',
+                                        value: Array.from(getAddressEncoder().encode(BPF_LOADER)),
+                                    },
+                                    seeds: [{ kind: 'account', path: 'program' }],
+                                },
+                            },
+                        ],
+                    },
+                ],
+            };
+            const programDataClient = createProgramClient(rootNodeFromAnchor(programDataIdl));
+
+            const [expected] = await getProgramDerivedAddress({
+                programAddress: BPF_LOADER,
+                seeds: [getAddressEncoder().encode(ownAddress)],
+            });
+            const [derived] = await programDataClient.pdas!.programData();
+            expect(derived).toBe(expected);
+        });
+
+        test('should still require a programAddress for unpinned dynamic PDAs', () => {
+            // Same shape, but the referenced program account has no address constraint.
+            const unpinnedIdl: IdlV01 = {
+                ...pinnedIdl,
+                instructions: [
+                    {
+                        ...pinnedIdl.instructions[0],
+                        accounts: [pinnedIdl.instructions[0].accounts[0], { name: 'amm_program' }],
+                    },
+                ],
+            };
+            const unpinnedClient = createProgramClient(rootNodeFromAnchor(unpinnedIdl));
+            expect(() => unpinnedClient.pdas!.ammAuthority()).toThrow(CodamaError);
+            expect(() => unpinnedClient.pdas!.ammAuthority()).toThrow(/pass config\.programAddress/);
         });
     });
 

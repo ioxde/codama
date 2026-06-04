@@ -60,9 +60,11 @@ export function extractPdasFromProgram(program: ProgramNode): ProgramNode {
                 return account;
             }
 
-            // Static cross-program PDAs stay inline. Dynamic-programId PDAs lift; the ref stays on the wrapper.
+            // Static cross-program PDAs stay inline. PDAs with a runtime program ref are hoisted
+            // even when pinned; the ref stays on the pdaValueNode.
             const pda = account.defaultValue.pda;
-            if (pda.programId && pda.programId !== program.publicKey) return account;
+            const hasRuntimeProgramRef = account.defaultValue.programId !== undefined;
+            if (pda.programId && pda.programId !== program.publicKey && !hasRuntimeProgramRef) return account;
 
             const fingerprint = pdaFingerprint(pda, hashVisitor);
 
