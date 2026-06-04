@@ -5,6 +5,8 @@ import {
     CodamaError,
 } from '@codama/errors';
 import {
+    accountValueNode,
+    argumentValueNode,
     assertIsNode,
     bytesTypeNode,
     bytesValueNode,
@@ -14,7 +16,9 @@ import {
     fixedSizeTypeNode,
     instructionAccountNode,
     instructionNode,
+    pdaLinkNode,
     pdaNode,
+    pdaSeedValueNode,
     pdaValueNode,
     programNode,
     rootNode,
@@ -50,6 +54,48 @@ test('it creates root nodes from IDL version 0.0', () => {
 
     expect(node).toEqual(
         rootNode(programNode({ name: 'myProgram', origin: 'anchor', publicKey: '1111', version: '1.2.3' })),
+    );
+});
+
+test('it rewrites PDA seed references to struct argument fields lifted by flattening', () => {
+    // Flattening lifts `args.my_field` to a top-level `myField` argument,
+    // so the PDA seed reference must be rewritten to point at it.
+    const node = rootNodeFromAnchor({
+        address: '11111111111111111111111111111111',
+        instructions: [
+            {
+                accounts: [
+                    { name: 'other_account' },
+                    {
+                        name: 'my_pda_account',
+                        pda: {
+                            seeds: [
+                                { kind: 'const', value: utf8('seed') },
+                                { kind: 'arg', path: 'args.my_field' },
+                                { kind: 'account', path: 'other_account' },
+                            ],
+                        },
+                        writable: true,
+                    },
+                ],
+                args: [{ name: 'args', type: { defined: { name: 'DoThingArgs' } } }],
+                discriminator: [1, 2, 3, 4, 5, 6, 7, 8],
+                name: 'do_thing',
+            },
+        ],
+        metadata: { name: 'myProgram', spec: '0.1.0', version: '1.2.3' },
+        types: [{ name: 'DoThingArgs', type: { fields: [{ name: 'my_field', type: 'pubkey' }], kind: 'struct' } }],
+    });
+
+    assertIsNode(node, 'rootNode');
+    const instruction = node.program.instructions[0];
+    expect(instruction.arguments.map(argument => argument.name)).toStrictEqual(['discriminator', 'myField']);
+    const account = instruction.accounts.find(({ name }) => name === 'myPdaAccount');
+    expect(account?.defaultValue).toStrictEqual(
+        pdaValueNode(pdaLinkNode('myPdaAccount'), [
+            pdaSeedValueNode('myField', argumentValueNode('myField')),
+            pdaSeedValueNode('otherAccount', accountValueNode('otherAccount')),
+        ]),
     );
 });
 

@@ -52,6 +52,7 @@ import {
     CODAMA_ERROR__VISITORS__ACCOUNT_FIELD_NOT_FOUND,
     CODAMA_ERROR__VISITORS__CANNOT_ADD_DUPLICATED_PDA_NAMES,
     CODAMA_ERROR__VISITORS__CANNOT_EXTEND_MISSING_VISIT_FUNCTION,
+    CODAMA_ERROR__VISITORS__CANNOT_FLATTEN_STRUCT_REFERENCED_AS_A_WHOLE,
     CODAMA_ERROR__VISITORS__CANNOT_FLATTEN_STRUCT_WITH_CONFLICTING_ATTRIBUTES,
     CODAMA_ERROR__VISITORS__CANNOT_REMOVE_LAST_PATH_IN_NODE_STACK,
     CODAMA_ERROR__VISITORS__CANNOT_USE_OPTIONAL_ACCOUNT_AS_PDA_SEED_VALUE,
@@ -145,6 +146,8 @@ export const CodamaErrorMessages: Readonly<{
         'Cannot add PDAs to program [$programName] because the following PDA names already exist [$duplicatedPdaNames].',
     [CODAMA_ERROR__VISITORS__CANNOT_EXTEND_MISSING_VISIT_FUNCTION]:
         'Cannot extend visitor with function [$visitFunction] as the base visitor does not support it.',
+    [CODAMA_ERROR__VISITORS__CANNOT_FLATTEN_STRUCT_REFERENCED_AS_A_WHOLE]:
+        'Cannot flatten the struct argument [$argumentName] of the [$instructionName] instruction because another node references it as a whole.',
     [CODAMA_ERROR__VISITORS__CANNOT_FLATTEN_STRUCT_WITH_CONFLICTING_ATTRIBUTES]:
         'Cannot flatten struct since this would cause the following attributes to conflict [$conflictingAttributes].',
     [CODAMA_ERROR__VISITORS__CANNOT_REMOVE_LAST_PATH_IN_NODE_STACK]: 'Cannot remove the last path in the node stack.',
