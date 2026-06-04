@@ -341,3 +341,62 @@ test('deduplicateInstructionDependencies preserves distinct nested paths sharing
     const result = deduplicateInstructionDependencies([a, b]);
     expect(result).toHaveLength(2);
 });
+
+test('it throws when an optional account is used as a PDA seed by default', () => {
+    // Given the following instruction node with an optional account used as a PDA seed.
+    const node = instructionNode({
+        accounts: [
+            instructionAccountNode({ isOptional: true, isSigner: false, isWritable: false, name: 'owner' }),
+            instructionAccountNode({
+                defaultValue: pdaValueNode('record', [pdaSeedValueNode('owner', accountValueNode('owner'))]),
+                isSigner: false,
+                isWritable: true,
+                name: 'record',
+            }),
+        ],
+        name: 'createRecord',
+    });
+
+    // When we get its resolved inputs with default options, then we expect an error.
+    expect(() => visit(node, getResolvedInstructionInputsVisitor())).toThrow(
+        /Cannot use optional account \[owner\] as the \[owner\] PDA seed/,
+    );
+});
+
+test('it resolves an optional account used as a PDA seed when allowOptionalAccountsAsPdaSeeds is set', () => {
+    // Given the following instruction node with an optional account used as a PDA seed.
+    const node = instructionNode({
+        accounts: [
+            instructionAccountNode({ isOptional: true, isSigner: false, isWritable: false, name: 'owner' }),
+            instructionAccountNode({
+                defaultValue: pdaValueNode('record', [pdaSeedValueNode('owner', accountValueNode('owner'))]),
+                isSigner: false,
+                isWritable: true,
+                name: 'record',
+            }),
+        ],
+        name: 'createRecord',
+    });
+
+    // When we get its resolved inputs with allowOptionalAccountsAsPdaSeeds.
+    const result = visit(node, getResolvedInstructionInputsVisitor({ allowOptionalAccountsAsPdaSeeds: true }));
+
+    // Then we expect the accounts to be in order of resolution
+    // and the seed account to remain optional.
+    expect(result).toEqual([
+        {
+            ...node.accounts[0],
+            dependsOn: [],
+            isPda: false,
+            resolvedIsOptional: true,
+            resolvedIsSigner: false,
+        },
+        {
+            ...node.accounts[1],
+            dependsOn: [accountValueNode('owner')],
+            isPda: false,
+            resolvedIsOptional: false,
+            resolvedIsSigner: false,
+        },
+    ]);
+});

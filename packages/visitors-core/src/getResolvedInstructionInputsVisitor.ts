@@ -37,8 +37,9 @@ type InstructionInput = InstructionAccountNode | InstructionArgumentNode;
 type InstructionDependency = AccountValueNode | ArgumentValueNode;
 
 export function getResolvedInstructionInputsVisitor(
-    options: { includeDataArgumentValueNodes?: boolean } = {},
+    options: { allowOptionalAccountsAsPdaSeeds?: boolean; includeDataArgumentValueNodes?: boolean } = {},
 ): Visitor<ResolvedInstructionInput[], 'instructionNode'> {
+    const allowOptionalAccountsAsPdaSeeds = options.allowOptionalAccountsAsPdaSeeds ?? false;
     const includeDataArgumentValueNodes = options.includeDataArgumentValueNodes ?? false;
     let stack: InstructionInput[] = [];
     let resolved: ResolvedInstructionInput[] = [];
@@ -128,7 +129,8 @@ export function getResolvedInstructionInputsVisitor(
                 seeds.forEach(seed => {
                     if (!isNode(seed.value, 'accountValueNode')) return;
                     const dependency = visitedAccounts.get(seed.value.name)!;
-                    if (dependency.resolvedIsOptional) {
+                    // Renderers that check account presence at runtime can opt out of this check.
+                    if (dependency.resolvedIsOptional && !allowOptionalAccountsAsPdaSeeds) {
                         throw new CodamaError(CODAMA_ERROR__VISITORS__CANNOT_USE_OPTIONAL_ACCOUNT_AS_PDA_SEED_VALUE, {
                             instruction: instruction,
                             instructionAccount: account,
