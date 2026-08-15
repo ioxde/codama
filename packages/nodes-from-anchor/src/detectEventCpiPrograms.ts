@@ -1,18 +1,29 @@
 import { logWarn } from '@codama/errors';
-import { CamelCaseString, InstructionAccountNode, isNode, PdaNode, ProgramNode, RootNode } from '@codama/nodes';
+import {
+    CamelCaseString,
+    getAllPrograms,
+    InstructionAccountNode,
+    isNode,
+    PdaNode,
+    ProgramNode,
+    RootNode,
+} from '@codama/nodes';
 import { getUtf8Codec } from '@solana/codecs';
 
 import { encodeBytesValue } from './encodeBytesValue';
 
 export function detectEventCpiPrograms(root: RootNode): CamelCaseString[] {
-    return [root.program, ...root.additionalPrograms].filter(programHasEventCpi).map(p => p.name);
+    return getAllPrograms(root)
+        .filter(programHasEventCpi)
+        .map(p => p.name);
 }
 
 function programHasEventCpi(program: ProgramNode): boolean {
-    return program.instructions.some(ix => {
-        const authority = ix.accounts.find(isEventAuthorityLikeAccount);
+    return (program.instructions ?? []).some(ix => {
+        const accounts = ix.accounts ?? [];
+        const authority = accounts.find(isEventAuthorityLikeAccount);
         if (!authority) return false;
-        if (!ix.accounts.some(a => a.name === ('program' as CamelCaseString))) {
+        if (!accounts.some(a => a.name === ('program' as CamelCaseString))) {
             logWarn(`Skipping event CPI detection for "${program.name}::${ix.name}": missing "program" account.`);
             return false;
         }
@@ -42,10 +53,11 @@ function accountHasEventAuthoritySeed(account: InstructionAccountNode, program: 
     const pdaRef = account.defaultValue.pda;
     const pda: PdaNode | undefined = isNode(pdaRef, 'pdaNode')
         ? pdaRef
-        : program.pdas.find(p => p.name === pdaRef.name);
-    if (!pda || pda.seeds.length !== 1) return false;
+        : (program.pdas ?? []).find(p => p.name === pdaRef.name);
+    const seeds = pda?.seeds ?? [];
+    if (!pda || seeds.length !== 1) return false;
 
-    const first = pda.seeds[0];
+    const first = seeds[0];
     if (!isNode(first, 'constantPdaSeedNode')) return false;
     if (!isNode(first.value, 'bytesValueNode')) return false;
 

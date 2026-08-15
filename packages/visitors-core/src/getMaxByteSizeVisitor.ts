@@ -1,9 +1,9 @@
 import { CountNode, isNode, isScalarEnum, REGISTERED_TYPE_NODE_KINDS } from '@codama/nodes';
 
 import { extendVisitor } from './extendVisitor';
+import { mergeVisitor } from './generated/mergeVisitor';
 import { ByteSizeVisitorKeys } from './getByteSizeVisitor';
 import { LinkableDictionary } from './LinkableDictionary';
-import { mergeVisitor } from './mergeVisitor';
 import { getLastNodeFromPath } from './NodePath';
 import { NodeStack } from './NodeStack';
 import { pipe } from './pipe';
@@ -102,7 +102,7 @@ export function getMaxByteSizeVisitor(
                     const prefix = visit(node.size, self);
                     if (prefix === null) return null;
                     if (isScalarEnum(node)) return prefix;
-                    const variantSizes = node.variants.map(v => visit(v, self));
+                    const variantSizes = (node.variants ?? []).map(v => visit(v, self));
                     if (variantSizes.includes(null)) return null;
                     const maxVariantSize = Math.max(...(variantSizes as number[]));
                     return prefix + maxVariantSize;
@@ -113,7 +113,7 @@ export function getMaxByteSizeVisitor(
                 },
 
                 visitInstruction(node, { self }) {
-                    return sumSizes(node.arguments.map(arg => visit(arg, self)));
+                    return sumSizes((node.arguments ?? []).map(arg => visit(arg, self)));
                 },
 
                 visitInstructionArgument(node, { self }) {
@@ -155,6 +155,12 @@ export function getMaxByteSizeVisitor(
 
                 visitSetType(node, { self }) {
                     return getArrayLikeSize(node.count, visit(node.item, self), self);
+                },
+
+                visitStringType() {
+                    // Strings have no fixed maximum byte size; size is determined by an
+                    // enclosing wrapper such as `sizePrefixTypeNode` or `fixedSizeTypeNode`.
+                    return null;
                 },
 
                 visitZeroableOptionType(node, { self }) {

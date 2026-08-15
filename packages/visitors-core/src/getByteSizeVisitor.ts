@@ -1,8 +1,8 @@
 import { CountNode, isNode, isScalarEnum, REGISTERED_TYPE_NODE_KINDS, RegisteredTypeNode } from '@codama/nodes';
 
 import { extendVisitor } from './extendVisitor';
+import { mergeVisitor } from './generated/mergeVisitor';
 import { LinkableDictionary } from './LinkableDictionary';
-import { mergeVisitor } from './mergeVisitor';
 import { getLastNodeFromPath } from './NodePath';
 import { NodeStack } from './NodeStack';
 import { pipe } from './pipe';
@@ -110,7 +110,7 @@ export function getByteSizeVisitor(
                     const prefix = visit(node.size, self);
                     if (prefix === null) return null;
                     if (isScalarEnum(node)) return prefix;
-                    const variantSizes = node.variants.map(v => visit(v, self));
+                    const variantSizes = (node.variants ?? []).map(v => visit(v, self));
                     const allVariantHaveTheSameFixedSize = variantSizes.every((one, _, all) => one === all[0]);
                     return allVariantHaveTheSameFixedSize && variantSizes.length > 0 && variantSizes[0] !== null
                         ? variantSizes[0] + prefix
@@ -122,7 +122,7 @@ export function getByteSizeVisitor(
                 },
 
                 visitInstruction(node, { self }) {
-                    return sumSizes(node.arguments.map(arg => visit(arg, self)));
+                    return sumSizes((node.arguments ?? []).map(arg => visit(arg, self)));
                 },
 
                 visitInstructionArgument(node, { self }) {
@@ -165,6 +165,12 @@ export function getByteSizeVisitor(
 
                 visitSetType(node, { self }) {
                     return getArrayLikeSize(node.count, visit(node.item, self), self);
+                },
+
+                visitStringType() {
+                    // Strings have no fixed byte size; size is determined by an enclosing
+                    // wrapper such as `sizePrefixTypeNode` or `fixedSizeTypeNode`.
+                    return null;
                 },
 
                 visitZeroableOptionType(node, { self }) {

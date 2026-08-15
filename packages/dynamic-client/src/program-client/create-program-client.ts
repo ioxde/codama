@@ -2,6 +2,7 @@ import {
     type AccountsInput,
     type AddressInput,
     type ArgumentsInput,
+    collectPdaNodeDetailsFromIdl,
     type ResolversInput,
     resolveStandalonePda,
     type StandalonePdaConfig,
@@ -18,7 +19,6 @@ import type { Instruction } from '@solana/instructions';
 import type { InstructionNode, RootNode } from 'codama';
 import { createFromJson, updateProgramsVisitor } from 'codama';
 
-import { collectPdaNodes } from './collect-pdas';
 import { MethodsBuilder } from './methods-builder';
 
 export type IdlInput = object | string;
@@ -80,7 +80,7 @@ export function createProgramClient<TClient = ProgramClient>(
     const programAddress = address(root.program.publicKey);
 
     const instructions = new Map<string, InstructionNode>();
-    for (const ix of root.program.instructions) {
+    for (const ix of root.program.instructions ?? []) {
         instructions.set(ix.name, ix);
     }
 
@@ -107,7 +107,7 @@ export function createProgramClient<TClient = ProgramClient>(
         },
     ) as ProgramClient['methods'];
 
-    const pdaNodes = collectPdaNodes(root);
+    const pdaNodes = collectPdaNodeDetailsFromIdl(root);
 
     const pdas =
         pdaNodes.size === 0

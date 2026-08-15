@@ -632,7 +632,7 @@ test('it resolves a duplicate bare-account seed in a local PDA to the real accou
     if (!isNode(dv, 'pdaValueNode')) {
         throw new Error('expected derived to be a pdaValueNode');
     }
-    const accountTargets = dv.seeds.flatMap(s => (isNode(s.value, 'accountValueNode') ? [s.value.name] : []));
+    const accountTargets = (dv.seeds ?? []).flatMap(s => (isNode(s.value, 'accountValueNode') ? [s.value.name] : []));
     expect(accountTargets).toEqual(['stateAccount', 'mint', 'mint']);
 });
 
@@ -848,7 +848,7 @@ test('it gives colliding account paths (mint.key field vs mint_key account) dist
     );
 
     const defaultValue = nodes[0].defaultValue;
-    const seeds = isNode(defaultValue, 'pdaValueNode') ? defaultValue.seeds : [];
+    const seeds = isNode(defaultValue, 'pdaValueNode') ? (defaultValue.seeds ?? []) : [];
     const seedNames = seeds.map(seed => seed.name);
 
     expect(seeds.length).toBe(2);
@@ -1012,8 +1012,10 @@ test('it bakes an account-ref seed of an address-constrained sibling as a consta
     );
     const dv = liftedPda(nodes.find(n => n.name === 'derived'));
     // The pinned sibling becomes a constant seed; the unpinned seed stays variable.
-    expect(dv.pda.seeds[0]).toEqual(constantPdaSeedNode(publicKeyTypeNode(), publicKeyValueNode(ARBITRARY_PROGRAM_B)));
-    expect(dv.pda.seeds[1]).toEqual(variablePdaSeedNode('owner', publicKeyTypeNode()));
+    expect((dv.pda.seeds ?? [])[0]).toEqual(
+        constantPdaSeedNode(publicKeyTypeNode(), publicKeyValueNode(ARBITRARY_PROGRAM_B)),
+    );
+    expect((dv.pda.seeds ?? [])[1]).toEqual(variablePdaSeedNode('owner', publicKeyTypeNode()));
     // The use-site value for the baked seed is dropped; the variable one remains.
     expect(dv.seeds).toEqual([pdaSeedValueNode('owner', accountValueNode('owner'))]);
 });
@@ -1032,7 +1034,7 @@ test('it keeps an account-ref seed variable when the sibling has no address cons
         [],
     );
     const dv = liftedPda(nodes.find(n => n.name === 'derived'));
-    expect(dv.pda.seeds[0]).toEqual(variablePdaSeedNode('someProgram', publicKeyTypeNode()));
+    expect((dv.pda.seeds ?? [])[0]).toEqual(variablePdaSeedNode('someProgram', publicKeyTypeNode()));
     expect(dv.seeds).toEqual([pdaSeedValueNode('someProgram', accountValueNode('someProgram'))]);
 });
 

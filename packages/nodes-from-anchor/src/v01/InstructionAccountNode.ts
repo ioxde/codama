@@ -119,7 +119,7 @@ export function stampPinnedAddresses(accounts: InstructionAccountNode[]): Instru
         const dv = account.defaultValue;
         if (!isNode(dv, 'pdaValueNode') || !isNode(dv.pda, 'pdaNode')) return account;
         let pda = dv.pda;
-        let seeds = dv.seeds;
+        let seeds: PdaSeedValueNode[] = dv.seeds ?? [];
 
         if (!pda.programId && isNode(dv.programId, 'accountValueNode')) {
             const programId = pinned.get(dv.programId.name);
@@ -134,7 +134,7 @@ export function stampPinnedAddresses(accounts: InstructionAccountNode[]): Instru
         }
         if (pinnedSeeds.size > 0) {
             const baked = new Set<string>();
-            const definitionSeeds = pda.seeds.map(seed => {
+            const definitionSeeds = (pda.seeds ?? []).map(seed => {
                 if (!isNode(seed, 'variablePdaSeedNode')) return seed;
                 const address = pinnedSeeds.get(seed.name);
                 if (!address) return seed;

@@ -43,9 +43,9 @@ test('prepends the CPI prefix and shifts the existing discriminator offset', () 
     const result = visit(input, wrapEventsWithCpiDiscriminatorVisitor({ discriminator: ANCHOR_CPI_BYTES }));
 
     assertIsNode(result, 'programNode');
-    expect(result.events[0].framing?.kind).toBe('anchorEventCpi');
-    expect(result.events[0].data).toStrictEqual(hiddenPrefixTypeNode(struct(), [cpi(), eventDisc]));
-    expect(result.events[0].discriminators).toStrictEqual([
+    expect((result.events ?? [])[0].framing?.kind).toBe('anchorEventCpi');
+    expect((result.events ?? [])[0].data).toStrictEqual(hiddenPrefixTypeNode(struct(), [cpi(), eventDisc]));
+    expect((result.events ?? [])[0].discriminators).toStrictEqual([
         constantDiscriminatorNode(cpi(), 0),
         constantDiscriminatorNode(eventDisc, 8),
     ]);
@@ -57,9 +57,9 @@ test('wraps events whose data is a plain struct', () => {
     const result = visit(input, wrapEventsWithCpiDiscriminatorVisitor({ discriminator: ANCHOR_CPI_BYTES }));
 
     assertIsNode(result, 'programNode');
-    expect(result.events[0].framing?.kind).toBe('anchorEventCpi');
-    expect(result.events[0].data).toStrictEqual(hiddenPrefixTypeNode(struct(), [cpi()]));
-    expect(result.events[0].discriminators).toStrictEqual([constantDiscriminatorNode(cpi(), 0)]);
+    expect((result.events ?? [])[0].framing?.kind).toBe('anchorEventCpi');
+    expect((result.events ?? [])[0].data).toStrictEqual(hiddenPrefixTypeNode(struct(), [cpi()]));
+    expect((result.events ?? [])[0].discriminators).toStrictEqual([constantDiscriminatorNode(cpi(), 0)]);
 });
 
 test('shifts non-zero offsets of existing constant discriminators', () => {
@@ -75,7 +75,7 @@ test('shifts non-zero offsets of existing constant discriminators', () => {
     const result = visit(input, wrapEventsWithCpiDiscriminatorVisitor({ discriminator: ANCHOR_CPI_BYTES }));
 
     assertIsNode(result, 'programNode');
-    expect(result.events[0].discriminators).toStrictEqual([
+    expect((result.events ?? [])[0].discriminators).toStrictEqual([
         constantDiscriminatorNode(cpi(), 0),
         constantDiscriminatorNode(inner, 20),
     ]);
@@ -89,7 +89,7 @@ test('shifts field discriminator offsets', () => {
     const result = visit(input, wrapEventsWithCpiDiscriminatorVisitor({ discriminator: ANCHOR_CPI_BYTES }));
 
     assertIsNode(result, 'programNode');
-    expect(result.events[0].discriminators).toStrictEqual([
+    expect((result.events ?? [])[0].discriminators).toStrictEqual([
         constantDiscriminatorNode(cpi(), 0),
         fieldDiscriminatorNode('kind', 8),
     ]);
@@ -103,7 +103,7 @@ test('shifts size discriminators by the prefix length', () => {
     const result = visit(input, wrapEventsWithCpiDiscriminatorVisitor({ discriminator: ANCHOR_CPI_BYTES }));
 
     assertIsNode(result, 'programNode');
-    expect(result.events[0].discriminators).toStrictEqual([
+    expect((result.events ?? [])[0].discriminators).toStrictEqual([
         constantDiscriminatorNode(cpi(), 0),
         sizeDiscriminatorNode(40),
     ]);
@@ -130,7 +130,22 @@ test('emitted framing carries the shared constant name', () => {
     const result = visit(input, wrapEventsWithCpiDiscriminatorVisitor({ discriminator: ANCHOR_CPI_BYTES }));
 
     assertIsNode(result, 'programNode');
-    expect(result.events[0].framing).toStrictEqual(anchorEventCpiFraming);
+    expect((result.events ?? [])[0].framing).toStrictEqual(anchorEventCpiFraming);
+});
+
+// ioxde fork: `hiddenPrefixTypeNode(x, [])` has no `prefix` key, so `identityVisitor` unwraps it back to `x`
+// mid-traversal. The event must end up with exactly one prefix level, not a nested hidden-prefix wrapper.
+test('wraps a hidden-prefix event whose prefix list is absent', () => {
+    const emptyPrefix = hiddenPrefixTypeNode(struct(), []);
+    expect(emptyPrefix.prefix).toBeUndefined();
+    const input = wrapIn([eventNode({ data: emptyPrefix, name: 'myEvent' })]);
+
+    const result = visit(input, wrapEventsWithCpiDiscriminatorVisitor({ discriminator: ANCHOR_CPI_BYTES }));
+
+    assertIsNode(result, 'programNode');
+    expect((result.events ?? [])[0].framing?.kind).toBe('anchorEventCpi');
+    expect((result.events ?? [])[0].data).toStrictEqual(hiddenPrefixTypeNode(struct(), [cpi()]));
+    expect((result.events ?? [])[0].discriminators).toStrictEqual([constantDiscriminatorNode(cpi(), 0)]);
 });
 
 test('tags but does not re-wrap events whose first prefix already matches the CPI envelope', () => {
@@ -145,9 +160,9 @@ test('tags but does not re-wrap events whose first prefix already matches the CP
     const result = visit(input, wrapEventsWithCpiDiscriminatorVisitor({ discriminator: ANCHOR_CPI_BYTES }));
 
     assertIsNode(result, 'programNode');
-    expect(result.events[0].framing?.kind).toBe('anchorEventCpi');
-    expect(result.events[0].data).toStrictEqual(preWrappedNoTag.data);
-    expect(result.events[0].discriminators).toStrictEqual(preWrappedNoTag.discriminators);
+    expect((result.events ?? [])[0].framing?.kind).toBe('anchorEventCpi');
+    expect((result.events ?? [])[0].data).toStrictEqual(preWrappedNoTag.data);
+    expect((result.events ?? [])[0].discriminators).toStrictEqual(preWrappedNoTag.discriminators);
 });
 
 test.each([
@@ -170,9 +185,9 @@ test.each([
     const result = visit(input, wrapEventsWithCpiDiscriminatorVisitor({ discriminator: ANCHOR_CPI_BYTES }));
 
     assertIsNode(result, 'programNode');
-    expect(result.events[0].framing?.kind).toBe('anchorEventCpi');
-    expect(result.events[0].data).toStrictEqual(preWrapped.data);
-    expect(result.events[0].discriminators).toStrictEqual(preWrapped.discriminators);
+    expect((result.events ?? [])[0].framing?.kind).toBe('anchorEventCpi');
+    expect((result.events ?? [])[0].data).toStrictEqual(preWrapped.data);
+    expect((result.events ?? [])[0].discriminators).toStrictEqual(preWrapped.discriminators);
 });
 
 test('only wraps events listed under the program in eventsByProgram', () => {
@@ -199,10 +214,10 @@ test('only wraps events listed under the program in eventsByProgram', () => {
     );
 
     assertIsNode(result, 'programNode');
-    expect(result.events[0].framing?.kind).toBe('anchorEventCpi');
-    expect(result.events[0].data).toStrictEqual(hiddenPrefixTypeNode(struct(), [cpi(), discA]));
-    expect(result.events[1]).toStrictEqual(eventB);
-    expect(result.events[1].framing).toBeUndefined();
+    expect((result.events ?? [])[0].framing?.kind).toBe('anchorEventCpi');
+    expect((result.events ?? [])[0].data).toStrictEqual(hiddenPrefixTypeNode(struct(), [cpi(), discA]));
+    expect((result.events ?? [])[1]).toStrictEqual(eventB);
+    expect((result.events ?? [])[1].framing).toBeUndefined();
 });
 
 test('only wraps programs listed in eventsByProgram', () => {
@@ -241,10 +256,10 @@ test('only wraps programs listed in eventsByProgram', () => {
     );
 
     assertIsNode(result, 'rootNode');
-    expect(result.program.events[0].framing?.kind).toBe('anchorEventCpi');
-    expect(result.program.events[0].data).toStrictEqual(hiddenPrefixTypeNode(struct(), [cpi(), discA]));
-    expect(result.additionalPrograms[0].events[0]).toStrictEqual(progB.events[0]);
-    expect(result.additionalPrograms[0].events[0].framing).toBeUndefined();
+    expect((result.program.events ?? [])[0].framing?.kind).toBe('anchorEventCpi');
+    expect((result.program.events ?? [])[0].data).toStrictEqual(hiddenPrefixTypeNode(struct(), [cpi(), discA]));
+    expect(((result.additionalPrograms ?? [])[0].events ?? [])[0]).toStrictEqual((progB.events ?? [])[0]);
+    expect(((result.additionalPrograms ?? [])[0].events ?? [])[0].framing).toBeUndefined();
 });
 
 test('throws when the pre-built discriminator has a non-fixed-size type', () => {
@@ -297,19 +312,19 @@ test('wraps only emit_cpi! events in a mixed program', () => {
     );
 
     assertIsNode(result, 'programNode');
-    expect(result.events[0].framing).toBeUndefined();
-    expect(result.events[0].data).toStrictEqual(hiddenPrefixTypeNode(struct(), [discEmitA]));
-    expect(result.events[2].framing).toBeUndefined();
-    expect(result.events[2].data).toStrictEqual(hiddenPrefixTypeNode(struct(), [discEmitC]));
-    expect(result.events[1].framing?.kind).toBe('anchorEventCpi');
-    expect(result.events[1].data).toStrictEqual(hiddenPrefixTypeNode(struct(), [cpi(), discCpiB]));
-    expect(result.events[1].discriminators).toStrictEqual([
+    expect((result.events ?? [])[0].framing).toBeUndefined();
+    expect((result.events ?? [])[0].data).toStrictEqual(hiddenPrefixTypeNode(struct(), [discEmitA]));
+    expect((result.events ?? [])[2].framing).toBeUndefined();
+    expect((result.events ?? [])[2].data).toStrictEqual(hiddenPrefixTypeNode(struct(), [discEmitC]));
+    expect((result.events ?? [])[1].framing?.kind).toBe('anchorEventCpi');
+    expect((result.events ?? [])[1].data).toStrictEqual(hiddenPrefixTypeNode(struct(), [cpi(), discCpiB]));
+    expect((result.events ?? [])[1].discriminators).toStrictEqual([
         constantDiscriminatorNode(cpi(), 0),
         constantDiscriminatorNode(discCpiB, 8),
     ]);
-    expect(result.events[3].framing?.kind).toBe('anchorEventCpi');
-    expect(result.events[3].data).toStrictEqual(hiddenPrefixTypeNode(struct(), [cpi(), discCpiD]));
-    expect(result.events[3].discriminators).toStrictEqual([
+    expect((result.events ?? [])[3].framing?.kind).toBe('anchorEventCpi');
+    expect((result.events ?? [])[3].data).toStrictEqual(hiddenPrefixTypeNode(struct(), [cpi(), discCpiD]));
+    expect((result.events ?? [])[3].discriminators).toStrictEqual([
         constantDiscriminatorNode(cpi(), 0),
         constantDiscriminatorNode(discCpiD, 8),
     ]);
@@ -329,8 +344,8 @@ test('accepts a pre-built ConstantValueNode for the discriminator', () => {
     const result = visit(input, wrapEventsWithCpiDiscriminatorVisitor({ discriminator: preBuilt }));
 
     assertIsNode(result, 'programNode');
-    expect(result.events[0].data).toStrictEqual(hiddenPrefixTypeNode(struct(), [preBuilt, eventDisc]));
-    expect(result.events[0].discriminators).toStrictEqual([
+    expect((result.events ?? [])[0].data).toStrictEqual(hiddenPrefixTypeNode(struct(), [preBuilt, eventDisc]));
+    expect((result.events ?? [])[0].discriminators).toStrictEqual([
         constantDiscriminatorNode(preBuilt, 0),
         constantDiscriminatorNode(eventDisc, 8),
     ]);
@@ -351,7 +366,7 @@ test('an empty eventsByProgram record matches no program', () => {
     );
 
     assertIsNode(result, 'programNode');
-    expect(result.events[0]).toStrictEqual(event);
+    expect((result.events ?? [])[0]).toStrictEqual(event);
 });
 
 test('a program in eventsByProgram with no events is skipped', () => {
@@ -387,7 +402,7 @@ test('an empty event list opts the program out', () => {
     );
 
     assertIsNode(result, 'programNode');
-    expect(result.events[0]).toStrictEqual(event);
+    expect((result.events ?? [])[0]).toStrictEqual(event);
 });
 
 test('leaves matching events untouched when filter excludes them', () => {
@@ -408,5 +423,5 @@ test('leaves matching events untouched when filter excludes them', () => {
     );
 
     assertIsNode(result, 'programNode');
-    expect(result.events[0]).toStrictEqual(event);
+    expect((result.events ?? [])[0]).toStrictEqual(event);
 });

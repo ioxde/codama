@@ -88,9 +88,9 @@ test('it rewrites PDA seed references to struct argument fields lifted by flatte
     });
 
     assertIsNode(node, 'rootNode');
-    const instruction = node.program.instructions[0];
-    expect(instruction.arguments.map(argument => argument.name)).toStrictEqual(['discriminator', 'myField']);
-    const account = instruction.accounts.find(({ name }) => name === 'myPdaAccount');
+    const instruction = (node.program.instructions ?? [])[0];
+    expect((instruction.arguments ?? []).map(argument => argument.name)).toStrictEqual(['discriminator', 'myField']);
+    const account = (instruction.accounts ?? []).find(({ name }) => name === 'myPdaAccount');
     expect(account?.defaultValue).toStrictEqual(
         pdaValueNode(pdaLinkNode('myPdaAccount'), [
             pdaSeedValueNode('myField', argumentValueNode('myField')),
@@ -150,7 +150,7 @@ test('wraps detected emit_cpi! events with the CPI discriminator', () => {
     const result = rootNodeFromAnchor(eventCpiIdl());
 
     assertIsNode(result, 'rootNode');
-    const event = result.program.events[0];
+    const event = (result.program.events ?? [])[0];
     assertIsNode(event.data, 'hiddenPrefixTypeNode');
     const myEventDisc = eventDisc('f61c0657fb2d322a');
 
@@ -169,8 +169,8 @@ test('leaves events unwrapped when no event_authority account is present', () =>
     const result = rootNodeFromAnchor(idl);
 
     assertIsNode(result, 'rootNode');
-    expect(result.program.events[0].framing).toBeUndefined();
-    expect(result.program.events[0].discriminators).toStrictEqual([
+    expect((result.program.events ?? [])[0].framing).toBeUndefined();
+    expect((result.program.events ?? [])[0].discriminators).toStrictEqual([
         constantDiscriminatorNode(eventDisc('f61c0657fb2d322a'), 0),
     ]);
 });
@@ -182,13 +182,13 @@ test('only wraps programs that actually use event CPI', () => {
     );
     assertIsNode(result, 'rootNode');
 
-    expect(result.program.events[0].framing?.kind).toBe('anchorEventCpi');
-    expect(result.program.events[0].discriminators).toStrictEqual([
+    expect((result.program.events ?? [])[0].framing?.kind).toBe('anchorEventCpi');
+    expect((result.program.events ?? [])[0].discriminators).toStrictEqual([
         constantDiscriminatorNode(cpiPrefix(), 0),
         constantDiscriminatorNode(eventDisc('f61c0657fb2d322a'), 8),
     ]);
-    expect(result.additionalPrograms[0].events[0].framing).toBeUndefined();
-    expect(result.additionalPrograms[0].events[0].discriminators).toStrictEqual([
+    expect(((result.additionalPrograms ?? [])[0].events ?? [])[0].framing).toBeUndefined();
+    expect(((result.additionalPrograms ?? [])[0].events ?? [])[0].discriminators).toStrictEqual([
         constantDiscriminatorNode(eventDisc('0a141e28323c4650'), 0),
     ]);
 });
@@ -200,12 +200,12 @@ test('wraps the additional program when it is the one using event CPI', () => {
     );
     assertIsNode(result, 'rootNode');
 
-    expect(result.program.events[0].framing).toBeUndefined();
-    expect(result.program.events[0].discriminators).toStrictEqual([
+    expect((result.program.events ?? [])[0].framing).toBeUndefined();
+    expect((result.program.events ?? [])[0].discriminators).toStrictEqual([
         constantDiscriminatorNode(eventDisc('0a141e28323c4650'), 0),
     ]);
-    expect(result.additionalPrograms[0].events[0].framing?.kind).toBe('anchorEventCpi');
-    expect(result.additionalPrograms[0].events[0].discriminators).toStrictEqual([
+    expect(((result.additionalPrograms ?? [])[0].events ?? [])[0].framing?.kind).toBe('anchorEventCpi');
+    expect(((result.additionalPrograms ?? [])[0].events ?? [])[0].discriminators).toStrictEqual([
         constantDiscriminatorNode(cpiPrefix(), 0),
         constantDiscriminatorNode(eventDisc('f61c0657fb2d322a'), 8),
     ]);
@@ -215,7 +215,7 @@ test('rootNodeFromAnchorV01 does not wrap events on its own', () => {
     const result = rootNodeFromAnchorV01(eventCpiIdl());
 
     assertIsNode(result, 'rootNode');
-    expect(result.program.events[0].discriminators).toStrictEqual([
+    expect((result.program.events ?? [])[0].discriminators).toStrictEqual([
         constantDiscriminatorNode(eventDisc('f61c0657fb2d322a'), 0),
     ]);
 });
@@ -224,7 +224,7 @@ test('cpiEvents wraps only the listed events within a detected program', () => {
     const result = rootNodeFromAnchor(eventCpiIdlMulti(), { cpiEvents: ['MyEvent'] });
 
     assertIsNode(result, 'rootNode');
-    const [myEvent, eventB, eventC] = result.program.events;
+    const [myEvent, eventB, eventC] = result.program.events ?? [];
 
     expect(myEvent.framing?.kind).toBe('anchorEventCpi');
     expect(myEvent.discriminators).toStrictEqual([
@@ -241,8 +241,8 @@ test('cpiEvents with an empty array opts a detected program out of wrapping', ()
     const result = rootNodeFromAnchor(eventCpiIdl(), { cpiEvents: [] });
 
     assertIsNode(result, 'rootNode');
-    expect(result.program.events[0].framing).toBeUndefined();
-    expect(result.program.events[0].discriminators).toStrictEqual([
+    expect((result.program.events ?? [])[0].framing).toBeUndefined();
+    expect((result.program.events ?? [])[0].discriminators).toStrictEqual([
         constantDiscriminatorNode(eventDisc('f61c0657fb2d322a'), 0),
     ]);
 });
@@ -251,7 +251,7 @@ test('cpiEvents event names are normalized to camelCase', () => {
     const result = rootNodeFromAnchor(eventCpiIdlMulti(), { cpiEvents: ['my_event'] });
 
     assertIsNode(result, 'rootNode');
-    const [myEvent, eventB] = result.program.events;
+    const [myEvent, eventB] = result.program.events ?? [];
     expect(myEvent.framing?.kind).toBe('anchorEventCpi');
     expect(myEvent.discriminators).toStrictEqual([
         constantDiscriminatorNode(cpiPrefix(), 0),
@@ -268,12 +268,12 @@ test('omitting a program from cpiEventsByProgram keeps default auto-wrap behavio
     );
     assertIsNode(result, 'rootNode');
 
-    expect(result.program.events[0].framing).toBeUndefined();
-    expect(result.program.events[0].discriminators).toStrictEqual([
+    expect((result.program.events ?? [])[0].framing).toBeUndefined();
+    expect((result.program.events ?? [])[0].discriminators).toStrictEqual([
         constantDiscriminatorNode(eventDisc('f61c0657fb2d322a'), 0),
     ]);
-    expect(result.additionalPrograms[0].events[0].framing?.kind).toBe('anchorEventCpi');
-    expect(result.additionalPrograms[0].events[0].discriminators).toStrictEqual([
+    expect(((result.additionalPrograms ?? [])[0].events ?? [])[0].framing?.kind).toBe('anchorEventCpi');
+    expect(((result.additionalPrograms ?? [])[0].events ?? [])[0].discriminators).toStrictEqual([
         constantDiscriminatorNode(cpiPrefix(), 0),
         constantDiscriminatorNode(eventDisc('f61c0657fb2d322a'), 8),
     ]);
@@ -361,8 +361,8 @@ test('rejects an event_authority PDA whose seed is not __event_authority', () =>
     const idl = withEventAuthoritySeeds([{ kind: 'const', value: utf8('some_other_seed') }]);
     const result = rootNodeFromAnchor(idl);
     assertIsNode(result, 'rootNode');
-    expect(result.program.events[0].framing).toBeUndefined();
-    expect(result.program.events[0].discriminators).toStrictEqual([
+    expect((result.program.events ?? [])[0].framing).toBeUndefined();
+    expect((result.program.events ?? [])[0].discriminators).toStrictEqual([
         constantDiscriminatorNode(eventDisc('f61c0657fb2d322a'), 0),
     ]);
 });
@@ -374,8 +374,8 @@ test('rejects an event_authority PDA with __event_authority plus an extra seed',
     ]);
     const result = rootNodeFromAnchor(idl);
     assertIsNode(result, 'rootNode');
-    expect(result.program.events[0].framing).toBeUndefined();
-    expect(result.program.events[0].discriminators).toStrictEqual([
+    expect((result.program.events ?? [])[0].framing).toBeUndefined();
+    expect((result.program.events ?? [])[0].discriminators).toStrictEqual([
         constantDiscriminatorNode(eventDisc('f61c0657fb2d322a'), 0),
     ]);
 });

@@ -56,7 +56,7 @@ test('it unifies a state_account PDA across the account-path and arg-path mints'
     );
 
     expect(result.pdas).toHaveLength(1);
-    expect(result.pdas.map(p => p.name)).toEqual(['stateAccount']);
+    expect((result.pdas ?? []).map(p => p.name)).toEqual(['stateAccount']);
 });
 
 // Assert non-skip on migrate's pool before the count check -- otherwise a wrongly-skipped migrate
@@ -112,14 +112,14 @@ test('it resolves and unifies a pool PDA across create (arg + accounts) and migr
         },
     );
 
-    const migratePool = migrate.accounts.find(a => a.name === 'pool');
+    const migratePool = (migrate.accounts ?? []).find(a => a.name === 'pool');
     expect(isNode(migratePool?.defaultValue, 'pdaValueNode')).toBe(true);
 
     const result = extractPdasFromProgram(
         programNode({ instructions: [createPool, migrate], name: 'test_program', publicKey: '1111' }),
     );
     expect(result.pdas).toHaveLength(1);
-    expect(result.pdas.map(p => p.name)).toEqual(['pool']);
+    expect((result.pdas ?? []).map(p => p.name)).toEqual(['pool']);
 });
 
 test('a foreign-program PDA keeps its inline defaultValue but is not promoted into this program.pdas', () => {
@@ -175,15 +175,17 @@ test('a foreign-program PDA keeps its inline defaultValue but is not promoted in
         },
     );
 
-    expect(isNode(createToken.accounts.find(a => a.name === 'externalDataRecord')?.defaultValue, 'pdaValueNode')).toBe(
+    expect(
+        isNode((createToken.accounts ?? []).find(a => a.name === 'externalDataRecord')?.defaultValue, 'pdaValueNode'),
+    ).toBe(true);
+    expect(isNode((read.accounts ?? []).find(a => a.name === 'externalDataRecord')?.defaultValue, 'pdaValueNode')).toBe(
         true,
     );
-    expect(isNode(read.accounts.find(a => a.name === 'externalDataRecord')?.defaultValue, 'pdaValueNode')).toBe(true);
 
     const result = extractPdasFromProgram(
         programNode({ instructions: [createToken, read], name: 'test_program', publicKey: '1111' }),
     );
-    expect(result.pdas.map(p => p.name)).not.toContain('externalDataRecord');
+    expect((result.pdas ?? []).map(p => p.name)).not.toContain('externalDataRecord');
 });
 
 // "Accepted" fracture: dropping seed names from the fingerprint would false-merge genuinely-distinct
@@ -232,5 +234,5 @@ test('it does not unify a state_account PDA across differently-named bare mint a
     );
 
     expect(result.pdas).toHaveLength(2);
-    expect(result.pdas.map(p => p.name).sort()).toEqual(['stateAccount', 'initV2StateAccount'].sort());
+    expect((result.pdas ?? []).map(p => p.name).sort()).toEqual(['stateAccount', 'initV2StateAccount'].sort());
 });

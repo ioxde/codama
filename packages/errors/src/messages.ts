@@ -118,8 +118,7 @@ export const CodamaErrorMessages: Readonly<{
         'Referenced node [$referencedName] not found in [$instructionName].',
     [CODAMA_ERROR__DYNAMIC_CLIENT__PDA_NOT_FOUND]: 'PDA [$pdaName] not found in IDL. Available: [$available].',
     [CODAMA_ERROR__DYNAMIC_CLIENT__PDA_REQUIRES_PROGRAM_ADDRESS]:
-        'PDA [$pdaName] has a dynamic programId; pass config.programAddress to deriveStandalonePDA.',
-
+        'PDA [$pdaName] has a dynamic programId; pass config.programAddress when deriving it.',
     [CODAMA_ERROR__DYNAMIC_CLIENT__UNEXPECTED_ADDRESS_TYPE]:
         'Expected [$expectedType] for account [$accountName], but received [$actualType].',
     [CODAMA_ERROR__DYNAMIC_CLIENT__UNEXPECTED_ARGUMENT_TYPE]:

@@ -126,7 +126,7 @@ export function getResolvedInstructionInputsVisitor(
                 localResolved.resolvedIsSigner = account.isSigner === false ? false : 'either';
                 localResolved.resolvedIsOptional = false;
                 const { seeds } = localResolved.defaultValue;
-                seeds.forEach(seed => {
+                (seeds ?? []).forEach(seed => {
                     if (!isNode(seed.value, 'accountValueNode')) return;
                     const dependency = visitedAccounts.get(seed.value.name)!;
                     // Renderers that check account presence at runtime can opt out of this check.
@@ -174,7 +174,7 @@ export function getResolvedInstructionInputsVisitor(
         dependencies.forEach(dependency => {
             let input: InstructionInput | null = null;
             if (isNode(dependency, 'accountValueNode')) {
-                const dependencyAccount = instruction.accounts.find(a => a.name === dependency.name);
+                const dependencyAccount = (instruction.accounts ?? []).find(a => a.name === dependency.name);
                 if (!dependencyAccount) {
                     throw new CodamaError(CODAMA_ERROR__VISITORS__INVALID_INSTRUCTION_DEFAULT_VALUE_DEPENDENCY, {
                         dependency,
@@ -220,8 +220,8 @@ export function getResolvedInstructionInputsVisitor(
         visitedArgs = new Map();
 
         const inputs: InstructionInput[] = [
-            ...node.accounts,
-            ...node.arguments.filter(a => {
+            ...(node.accounts ?? []),
+            ...(node.arguments ?? []).filter(a => {
                 if (includeDataArgumentValueNodes) return a.defaultValue;
                 return a.defaultValue && !isNode(a.defaultValue, VALUE_NODES);
             }),
@@ -258,8 +258,8 @@ function argumentDependencyKey(node: ArgumentValueNode): string {
 export function getInstructionDependencies(input: InstructionInput | InstructionNode): InstructionDependency[] {
     if (isNode(input, 'instructionNode')) {
         return deduplicateInstructionDependencies([
-            ...input.accounts.flatMap(getInstructionDependencies),
-            ...input.arguments.flatMap(getInstructionDependencies),
+            ...(input.accounts ?? []).flatMap(getInstructionDependencies),
+            ...(input.arguments ?? []).flatMap(getInstructionDependencies),
             ...(input.extraArguments ?? []).flatMap(getInstructionDependencies),
         ]);
     }
@@ -281,7 +281,7 @@ export function getInstructionDependencies(input: InstructionInput | Instruction
 
     if (isNode(input.defaultValue, 'pdaValueNode')) {
         const dependencies = new Map<string, InstructionDependency>();
-        input.defaultValue.seeds.forEach(seed => {
+        (input.defaultValue.seeds ?? []).forEach(seed => {
             if (isNode(seed.value, 'accountValueNode')) {
                 dependencies.set(seed.value.name, { ...seed.value });
             } else if (isNode(seed.value, 'argumentValueNode')) {

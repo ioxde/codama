@@ -5,7 +5,9 @@ import { mapVisitor, mergeVisitor, staticVisitor, visit, Visitor } from '../src'
 
 test('it maps the return value of a visitor to another', () => {
     // Given the following 3-nodes tree.
-    const node = tupleTypeNode([numberTypeNode('u32'), publicKeyTypeNode()]);
+    const item0 = numberTypeNode('u32');
+    const item1 = publicKeyTypeNode();
+    const node = tupleTypeNode([item0, item1]);
 
     // And a merge visitor A that lists the kind of each node.
     const visitorA = mergeVisitor(
@@ -17,9 +19,9 @@ test('it maps the return value of a visitor to another', () => {
     const visitorB = mapVisitor(visitorA, value => value.length);
 
     // Then we expect the following results when visiting different nodes.
-    expect(visit(node, visitorB)).toBe(47);
-    expect(visit(node.items[0], visitorB)).toBe(14);
-    expect(visit(node.items[1], visitorB)).toBe(17);
+    expect(visit(node, visitorB)).toBe(49);
+    expect(visit(item0, visitorB)).toBe(16);
+    expect(visit(item1, visitorB)).toBe(17);
 });
 
 test('it creates partial visitors from partial visitors', () => {

@@ -1,7 +1,10 @@
 {
     "name": "@codama/dynamic-instructions",
-    "version": "0.2.0",
+    "version": "0.4.0",
     "description": "Runtime instruction creation for Codama IDLs",
+    "bin": {
+        "dynamic-instructions": "./bin/cli.cjs"
+    },
     "exports": {
         ".": {
             "types": "./dist/types/index.d.ts",
@@ -14,6 +17,11 @@
                 "import": "./dist/index.node.mjs",
                 "require": "./dist/index.node.cjs"
             }
+        },
+        "./codegen": {
+            "types": "./dist/types/codegen/index.d.ts",
+            "import": "./dist/codegen.node.mjs",
+            "require": "./dist/codegen.node.cjs"
         }
     },
     "browser": {
@@ -24,10 +32,20 @@
     "module": "./dist/index.node.mjs",
     "react-native": "./dist/index.react-native.mjs",
     "types": "./dist/types/index.d.ts",
+    "typesVersions": {
+        "*": {
+            "codegen": [
+                "./dist/types/codegen/index.d.ts"
+            ]
+        }
+    },
     "type": "commonjs",
     "files": [
         "./dist/types",
-        "./dist/index.*"
+        "./dist/index.*",
+        "./dist/cli.*",
+        "./dist/codegen.*",
+        "./bin/*"
     ],
     "sideEffects": false,
     "keywords": [
@@ -50,15 +68,18 @@
     "dependencies": {
         "@codama/dynamic-address-resolution": "workspace:*",
         "@codama/dynamic-codecs": "workspace:*",
+        "@codama/dynamic-parsers": "workspace:*",
         "@codama/errors": "workspace:*",
+        "@solana/accounts": "^7.0.0",
         "@solana/addresses": "^5.3.0",
         "@solana/codecs": "^5.3.0",
-        "@solana/instructions": "^5.3.0",
+        "@solana/instructions": "^7.0.0",
         "codama": "workspace:*",
+        "commander": "^15.0.0",
         "superstruct": "^2.0.2"
     },
     "devDependencies": {
-        "@solana/kit": "6.5.0"
+        "@solana/kit": "7.0.0"
     },
     "license": "MIT",
     "repository": {

@@ -47,7 +47,7 @@ export function createConditionNodeValueVisitor<
 
         visitArgumentValue: async (node: ArgumentValueNode) => {
             const rootArg = argumentsInput?.[node.name];
-            // Resolve leniently: an unresolved condition is "not present" and takes the ifFalse branch,
+            // ioxde fork: resolve leniently — an unresolved condition is "not present" and takes the ifFalse branch,
             // same as a null account value or a missing resolver. So a missing or mis-shaped path
             // segment returns undefined instead of throwing. No TypeNode walk here: conditions compare
             // runtime values, not encoded bytes.

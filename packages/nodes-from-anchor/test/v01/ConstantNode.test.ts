@@ -21,7 +21,7 @@ const generics = {} as GenericsV01;
 test('it parses constant with number type and value', () => {
     const node = constantNodeFromAnchorV01(
         {
-            name: 'max_size',
+            name: 'MAX_SIZE',
             type: 'u64',
             value: '1000',
         },
@@ -29,6 +29,7 @@ test('it parses constant with number type and value', () => {
     );
 
     expect(node).toEqual(constantNode('maxSize', numberTypeNode('u64'), numberValueNode(1000)));
+    expect(node.name).toBe('maxSize');
 });
 
 test('it parses constant with bytes type and value', () => {
@@ -152,6 +153,8 @@ test('it parses constants in full program', () => {
     });
 
     expect(node.constants).toHaveLength(2);
-    expect(node.constants[0]).toEqual(constantNode('maxItems', numberTypeNode('u32'), numberValueNode(100)));
-    expect(node.constants[1]).toEqual(constantNode('seedPrefix', bytesTypeNode(), bytesValueNode('base16', '616263')));
+    expect((node.constants ?? [])[0]).toEqual(constantNode('maxItems', numberTypeNode('u32'), numberValueNode(100)));
+    expect((node.constants ?? [])[1]).toEqual(
+        constantNode('seedPrefix', bytesTypeNode(), bytesValueNode('base16', '616263')),
+    );
 });

@@ -1,7 +1,7 @@
 import { Node } from '@codama/nodes';
 
+import { mergeVisitor } from './generated/mergeVisitor';
 import { interceptVisitor } from './interceptVisitor';
-import { mergeVisitor } from './mergeVisitor';
 import { pipe } from './pipe';
 import { Visitor } from './visitor';
 
@@ -27,7 +27,7 @@ export function getDebugStringVisitor(options: { indent?: boolean; indentSeparat
                         ...values,
                     ].join('\n');
                 }
-                return `${node.kind}${details ? `[${details}]` : ''}(${values.join(', ')})`;
+                return `${node.kind}${details ? `[${details}]` : ''}${values.length > 0 ? `(${values.join(', ')})` : ''}`;
             },
         ),
         v =>

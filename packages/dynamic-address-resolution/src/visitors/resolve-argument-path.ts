@@ -10,6 +10,8 @@ import { isNode } from 'codama';
 
 import { isObjectRecord, safeStringify } from '../shared/util';
 
+// ioxde fork: backs the optional `path` on ArgumentValueNode, used by PDA seeds, account defaults and conditions.
+
 /**
  * Format a path array as the `argumentPath` suffix expected by ARGUMENT_MISSING error context.
  * Empty/missing path → "" (so the error message renders just the argument name).
@@ -35,7 +37,7 @@ export function resolveArgumentPathType(
     for (const segment of path) {
         current = unwrapDefinedTypeLink(current, root);
         if (isNode(current, 'structTypeNode')) {
-            const field = current.fields.find(f => f.name === segment);
+            const field = (current.fields ?? []).find(f => f.name === segment);
             if (!field) {
                 throw new CodamaError(CODAMA_ERROR__DYNAMIC_CLIENT__INVARIANT_VIOLATION, {
                     message: `Argument path "${argumentName}${pathSuffix([...visited, segment])}" does not exist: struct has no field "${segment}".`,
@@ -46,13 +48,14 @@ export function resolveArgumentPathType(
             continue;
         }
         if (isNode(current, 'tupleTypeNode')) {
+            const items = current.items ?? [];
             const index = Number(segment);
-            if (!Number.isInteger(index) || index < 0 || index >= current.items.length) {
+            if (!Number.isInteger(index) || index < 0 || index >= items.length) {
                 throw new CodamaError(CODAMA_ERROR__DYNAMIC_CLIENT__INVARIANT_VIOLATION, {
                     message: `Argument path "${argumentName}${pathSuffix([...visited, segment])}" does not exist: tuple has no item at index "${segment}".`,
                 });
             }
-            current = current.items[index];
+            current = items[index];
             visited.push(segment);
             continue;
         }
@@ -166,7 +169,7 @@ function unwrapDefinedTypeLink(node: TypeNode, root: RootNode, seen: Set<CamelCa
         });
     }
     seen.add(node.name);
-    const definedType = root.program.definedTypes.find(dt => dt.name === node.name);
+    const definedType = (root.program.definedTypes ?? []).find(dt => dt.name === node.name);
     if (!definedType) {
         throw new CodamaError(CODAMA_ERROR__LINKED_NODE_NOT_FOUND, {
             kind: 'definedTypeLinkNode',

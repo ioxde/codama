@@ -27,7 +27,7 @@ const pinnedIx = () =>
     ]);
 
 test('it stamps the pinned program of an address-constrained account ref onto the pdaNode', () => {
-    const dv = pinnedIx().accounts.find(a => a.name === 'ammAuthority')?.defaultValue;
+    const dv = (pinnedIx().accounts ?? []).find(a => a.name === 'ammAuthority')?.defaultValue;
     assertIsNode(dv, 'pdaValueNode');
     assertIsNode(dv.pda, 'pdaNode');
     expect(dv.pda.programId).toBe(AMM_PROGRAM);
@@ -43,11 +43,11 @@ test('it still hoists pinned dynamic-program PDAs to program level', () => {
 
     const result = extractPdasFromProgram(program);
 
-    const pda = result.pdas.find(p => p.name === 'ammAuthority');
+    const pda = (result.pdas ?? []).find(p => p.name === 'ammAuthority');
     expect(pda?.programId).toBe(AMM_PROGRAM);
 
     // The use site keeps the runtime ref and links to the hoisted node.
-    const dv = result.instructions[0].accounts.find(a => a.name === 'ammAuthority')?.defaultValue;
+    const dv = ((result.instructions ?? [])[0].accounts ?? []).find(a => a.name === 'ammAuthority')?.defaultValue;
     assertIsNode(dv, 'pdaValueNode');
     expect(dv.pda).toEqual({ kind: 'pdaLinkNode', name: 'ammAuthority' });
     expect(dv.programId).toEqual({ kind: 'accountValueNode', name: 'ammProgram' });
@@ -65,7 +65,7 @@ test('it leaves the pdaNode unstamped when the referenced program account has no
         { name: 'token_program' },
     ]);
 
-    const dv = node.accounts.find(a => a.name === 'authority')?.defaultValue;
+    const dv = (node.accounts ?? []).find(a => a.name === 'authority')?.defaultValue;
     assertIsNode(dv, 'pdaValueNode');
     assertIsNode(dv.pda, 'pdaNode');
     expect(dv.pda.programId).toBeUndefined();
@@ -90,7 +90,7 @@ test('it keeps const-program (ATA) PDAs inline, byte-identical', () => {
     ]);
 
     // A const program is set directly on the pdaNode; there is no runtime ref.
-    const dv = ata.accounts.find(a => a.name === 'tokenAccount')?.defaultValue;
+    const dv = (ata.accounts ?? []).find(a => a.name === 'tokenAccount')?.defaultValue;
     assertIsNode(dv, 'pdaValueNode');
     assertIsNode(dv.pda, 'pdaNode');
     expect(dv.pda.programId).toBe(ATA_PROGRAM);

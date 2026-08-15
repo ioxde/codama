@@ -40,14 +40,14 @@ test('it returns all instruction accounts in order of resolution', () => {
     // Then we expect the accounts to be in order of resolution.
     expect(result).toEqual([
         {
-            ...node.accounts[1],
+            ...(node.accounts ?? [])[1],
             dependsOn: [],
             isPda: false,
             resolvedIsOptional: false,
             resolvedIsSigner: true,
         },
         {
-            ...node.accounts[0],
+            ...(node.accounts ?? [])[0],
             dependsOn: [accountValueNode('authority')],
             isPda: false,
             resolvedIsOptional: false,
@@ -80,7 +80,7 @@ test('it sets the resolved signer to either when a non signer defaults to a sign
 
     // Then we expect the resolved signer to be either for the non signer account.
     expect(result[1]).toEqual({
-        ...node.accounts[0],
+        ...(node.accounts ?? [])[0],
         dependsOn: [accountValueNode('authority')],
         isPda: false,
         resolvedIsOptional: false,
@@ -112,7 +112,7 @@ test('it sets the resolved signer to either when a signer defaults to a non sign
 
     // Then we expect the resolved signer to be either for the signer account.
     expect(result[1]).toEqual({
-        ...node.accounts[0],
+        ...(node.accounts ?? [])[0],
         dependsOn: [accountValueNode('authority')],
         isPda: false,
         resolvedIsOptional: false,
@@ -152,14 +152,14 @@ test('it includes instruction data arguments with default values', () => {
     // Then we expect the following inputs.
     expect(result).toEqual([
         {
-            ...node.accounts[0],
+            ...(node.accounts ?? [])[0],
             dependsOn: [],
             isPda: false,
             resolvedIsOptional: false,
             resolvedIsSigner: true,
         },
         {
-            ...node.arguments[0],
+            ...(node.arguments ?? [])[0],
             dependsOn: [accountValueNode('owner')],
         },
     ]);
@@ -200,7 +200,7 @@ test('it includes instruction extra arguments with default values', () => {
     // Then we expect the following inputs.
     expect(result).toEqual([
         {
-            ...node.accounts[0],
+            ...(node.accounts ?? [])[0],
             dependsOn: [],
             isPda: false,
             resolvedIsOptional: false,
@@ -252,14 +252,14 @@ test('it resolves the seeds of a PdaValueNode first', () => {
     // Then we expect the accounts to be in order of resolution.
     expect(result).toEqual([
         {
-            ...node.accounts[1],
+            ...(node.accounts ?? [])[1],
             dependsOn: [],
             isPda: false,
             resolvedIsOptional: false,
             resolvedIsSigner: true,
         },
         {
-            ...node.accounts[0],
+            ...(node.accounts ?? [])[0],
             dependsOn: [accountValueNode('payer')],
             isPda: false,
             resolvedIsOptional: false,
@@ -319,14 +319,14 @@ test('it resolves the program id of a PdaValueNode first', () => {
     // Then we expect the accounts to be in order of resolution.
     expect(result).toEqual([
         {
-            ...node.accounts[1],
+            ...(node.accounts ?? [])[1],
             dependsOn: [],
             isPda: false,
             resolvedIsOptional: false,
             resolvedIsSigner: false,
         },
         {
-            ...node.accounts[0],
+            ...(node.accounts ?? [])[0],
             dependsOn: [accountValueNode('counterProgram')],
             isPda: false,
             resolvedIsOptional: false,
@@ -385,14 +385,14 @@ test('it resolves an optional account used as a PDA seed when allowOptionalAccou
     // and the seed account to remain optional.
     expect(result).toEqual([
         {
-            ...node.accounts[0],
+            ...(node.accounts ?? [])[0],
             dependsOn: [],
             isPda: false,
             resolvedIsOptional: true,
             resolvedIsSigner: false,
         },
         {
-            ...node.accounts[1],
+            ...(node.accounts ?? [])[1],
             dependsOn: [accountValueNode('owner')],
             isPda: false,
             resolvedIsOptional: false,

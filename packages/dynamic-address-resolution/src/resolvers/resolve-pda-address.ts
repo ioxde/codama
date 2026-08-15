@@ -14,7 +14,7 @@ import { isNode, visitOrElse } from 'codama';
 
 import type { AccountsInput, ArgumentsInput, ResolverFnInput, ResolversInput } from '../shared/types';
 import { getMaybeNodeKind } from '../shared/util';
-import { createPdaSeedValueVisitor, PDA_SEED_VALUE_SUPPORTED_NODE_KINDS } from '../visitors/pda-seed-value';
+import { createPdaSeedValueVisitor, unexpectedPdaSeedNodeFallback } from '../visitors/pda-seed-value';
 import { tryResolveArgumentPathValue } from '../visitors/resolve-argument-path';
 import { resolveAccountValueNodeAddress } from './resolve-account-value-node-address';
 import type { BaseResolutionContext } from './types';
@@ -52,8 +52,7 @@ export async function resolvePDAAddress<
         });
     }
 
-    const pdaNode = resolvePdaNode(pdaValueNode, root.program.pdas);
-    // Priority: dynamic programId (cross-program PDA) > pdaNode constant > local program.
+    const pdaNode = resolvePdaNode(pdaValueNode, root.program.pdas ?? []);
     const runtimeProgramId = await resolveRuntimeProgramId(
         pdaValueNode.programId,
         ixNode,
@@ -65,19 +64,21 @@ export async function resolvePDAAddress<
     );
     const programId = address(runtimeProgramId ?? pdaNode.programId ?? root.program.publicKey);
 
-    // Pair variable seeds to values by name; duplicate-named seeds are consumed in order.
+    const pdaSeedNodes = pdaNode.seeds ?? [];
+
+    // ioxde fork: `shift()` drains the buckets — this pass must run exactly once, in seed order.
     const valuesByName = new Map<string, PdaSeedValueNode[]>();
-    for (const seedValue of pdaValueNode.seeds) {
+    for (const seedValue of pdaValueNode.seeds ?? []) {
         const bucket = valuesByName.get(seedValue.name);
         if (bucket) bucket.push(seedValue);
         else valuesByName.set(seedValue.name, [seedValue]);
     }
-    const pairedSeedValues = pdaNode.seeds.map(seedNode =>
+    const pairedSeedValues = pdaSeedNodes.map(seedNode =>
         seedNode.kind === 'variablePdaSeedNode' ? valuesByName.get(seedNode.name)?.shift() : undefined,
     );
 
     const seedValues = await Promise.all(
-        pdaNode.seeds.map(async (seedNode, index) => {
+        pdaSeedNodes.map(async (seedNode, index) => {
             if (seedNode.kind === 'constantPdaSeedNode') {
                 return await resolveConstantPdaSeed({
                     accountsInput,
@@ -200,13 +201,7 @@ function resolveVariablePdaSeed<
         seedTypeNode: seedNode.type,
     });
 
-    return visitOrElse(variableSeedValueNode.value, visitor, node => {
-        throw new CodamaError(CODAMA_ERROR__UNEXPECTED_NODE_KIND, {
-            expectedKinds: [...PDA_SEED_VALUE_SUPPORTED_NODE_KINDS],
-            kind: node.kind,
-            node,
-        });
-    });
+    return visitOrElse(variableSeedValueNode.value, visitor, unexpectedPdaSeedNodeFallback);
 }
 
 type ResolveConstantPdaSeedContext<
@@ -249,13 +244,7 @@ function resolveConstantPdaSeed<
         root,
         seedTypeNode: seedNode.type,
     });
-    return visitOrElse(seedNode.value, visitor, node => {
-        throw new CodamaError(CODAMA_ERROR__UNEXPECTED_NODE_KIND, {
-            expectedKinds: [...PDA_SEED_VALUE_SUPPORTED_NODE_KINDS],
-            kind: node.kind,
-            node,
-        });
-    });
+    return visitOrElse(seedNode.value, visitor, unexpectedPdaSeedNodeFallback);
 }
 
 async function resolveRuntimeProgramId(
@@ -281,9 +270,9 @@ async function resolveRuntimeProgramId(
     }
     if (isNode(programIdRef, 'argumentValueNode')) {
         const rootArg = argumentsInput?.[programIdRef.name];
-        // The dynamic programId is an optional override; an unresolved arg falls back to the pdaNode
-        // constant / local program (see the caller's `?? pdaNode.programId ?? ...`). Resolve leniently
-        // so a missing nested arg returns undefined instead of aborting derivation.
+        // ioxde fork: resolve leniently — a missing arg falls back to `pdaNode.programId ?? local program`
+        // (pinned by `pda-value-node-program-id.test.ts`). `identityVisitor.visitPdaValue` is strict on a
+        // missing *node*; don't harmonize.
         const value =
             programIdRef.path && programIdRef.path.length > 0
                 ? tryResolveArgumentPathValue(rootArg, programIdRef.path)

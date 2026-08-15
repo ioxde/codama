@@ -74,11 +74,11 @@ function collectExtraArguments(
         if (!isNode(defaultValue, 'pdaValueNode') || !isNode(defaultValue.pda, 'pdaNode')) continue;
 
         const seedTypes = new Map<string, TypeNode>();
-        for (const seed of defaultValue.pda.seeds) {
+        for (const seed of defaultValue.pda.seeds ?? []) {
             if (isNode(seed, 'variablePdaSeedNode')) seedTypes.set(seed.name, seed.type);
         }
 
-        for (const seedValue of defaultValue.seeds) {
+        for (const seedValue of defaultValue.seeds ?? []) {
             const value = seedValue.value;
             // Path-bearing args reference an existing root arg, not a new input to synthesize.
             if (!isNode(value, 'argumentValueNode') || (value.path && value.path.length > 0)) continue;
@@ -111,7 +111,7 @@ function disambiguateCrossPdaSeedInputs(
         if (!isNode(dv, 'pdaValueNode') || !isNode(dv.pda, 'pdaNode')) return;
         const paths = pdaSeedSourcePaths(account, groups, scopes);
         if (!paths) return;
-        dv.seeds.forEach((seedValue, valueIndex) => {
+        (dv.seeds ?? []).forEach((seedValue, valueIndex) => {
             const value = seedValue.value;
             if (!isNode(value, 'argumentValueNode') || (value.path && value.path.length > 0)) return;
             const parts = paths[valueIndex];
@@ -139,7 +139,7 @@ function disambiguateCrossPdaSeedInputs(
     for (const { node } of lowered) {
         const dv = node.defaultValue;
         if (!isNode(dv, 'pdaValueNode')) continue;
-        for (const seedValue of dv.seeds) {
+        for (const seedValue of dv.seeds ?? []) {
             if (isNode(seedValue.value, 'accountValueNode')) used.add(seedValue.value.name);
         }
     }
@@ -173,7 +173,7 @@ function disambiguateCrossPdaSeedInputs(
         const dv = node.defaultValue;
         if (!isNode(dv, 'pdaValueNode') || !isNode(dv.pda, 'pdaNode')) return node;
         let changed = false;
-        const seeds = dv.seeds.map((seedValue, valueIndex) => {
+        const seeds = (dv.seeds ?? []).map((seedValue, valueIndex) => {
             const name = renames.get(`${accountIndex}#${valueIndex}`);
             const inner = seedValue.value;
             if (!name || !isNode(inner, 'argumentValueNode') || name === inner.name) return seedValue;

@@ -34,7 +34,7 @@ test('it derives a pinned-program PDA under the pinned program, standalone', asy
     const root = rootNodeFromAnchor(idl);
 
     // The pinned PDA must still be hoisted to program level.
-    const ammAuthority = root.program.pdas.find(p => p.name === 'ammAuthority');
+    const ammAuthority = (root.program.pdas ?? []).find(p => p.name === 'ammAuthority');
     expect(ammAuthority).toBeDefined();
 
     // Raydium V4 authority: findProgramAddress(["amm authority"], 675kPX…).

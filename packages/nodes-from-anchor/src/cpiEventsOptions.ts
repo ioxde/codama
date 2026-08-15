@@ -4,7 +4,7 @@ import {
     CODAMA_ERROR__ANCHOR__CPI_EVENTS_UNKNOWN_PROGRAM,
     CodamaError,
 } from '@codama/errors';
-import { camelCase, ProgramNode, RootNode } from '@codama/nodes';
+import { camelCase, getAllPrograms, ProgramNode, RootNode } from '@codama/nodes';
 
 export function normalizeCpiEventsOverrides(
     cpiEvents: Record<string, readonly string[]> | undefined,
@@ -34,9 +34,7 @@ export function validateCpiEventsOverrides(
     normalizedOverrides: Record<string, readonly string[]>,
 ): void {
     const detected = new Set<string>(detectedPrograms);
-    const programsByName = new Map<string, ProgramNode>(
-        [root.program, ...root.additionalPrograms].map(p => [p.name, p]),
-    );
+    const programsByName = new Map<string, ProgramNode>(getAllPrograms(root).map(p => [p.name, p]));
     for (const [programName, events] of Object.entries(normalizedOverrides)) {
         if (!detected.has(programName)) {
             throw new CodamaError(CODAMA_ERROR__ANCHOR__CPI_EVENTS_UNKNOWN_PROGRAM, {
@@ -45,7 +43,7 @@ export function validateCpiEventsOverrides(
             });
         }
         const program = programsByName.get(programName)!;
-        const availableEvents = program.events.map(e => e.name);
+        const availableEvents = (program.events ?? []).map(e => e.name);
         const availableSet = new Set(availableEvents);
         for (const rawEventName of events) {
             const eventName = camelCase(rawEventName);

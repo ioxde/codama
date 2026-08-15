@@ -22,11 +22,13 @@ export function flattenInstructionDataArgumentsVisitor() {
             transform: instruction => {
                 assertIsNode(instruction, 'instructionNode');
                 const flattenedRoots = new Set(
-                    instruction.arguments.filter(node => isNode(node.type, 'structTypeNode')).map(node => node.name),
+                    (instruction.arguments ?? [])
+                        .filter(node => isNode(node.type, 'structTypeNode'))
+                        .map(node => node.name),
                 );
                 const flattened = instructionNode({
                     ...instruction,
-                    arguments: flattenInstructionArguments(instruction.arguments),
+                    arguments: flattenInstructionArguments(instruction.arguments ?? []),
                 });
                 return flattenedRoots.size > 0 ? rewriteLiftedArgumentReferences(flattened, flattenedRoots) : flattened;
             },
@@ -76,7 +78,7 @@ export const flattenInstructionArguments = (
         options === '*' || camelCaseOptions.includes(camelCase(node.name));
     const inlinedArguments = nodes.flatMap(node => {
         if (isNode(node.type, 'structTypeNode') && shouldInline(node)) {
-            return node.type.fields.map(field => instructionArgumentNode({ ...field }));
+            return (node.type.fields ?? []).map(field => instructionArgumentNode({ ...field }));
         }
         return node;
     });

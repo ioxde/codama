@@ -172,16 +172,17 @@ function resolveNestedFieldType(
 
         if (isNode(currentType, 'structTypeNode')) {
             const target = camelCase(fieldName);
-            const field = currentType.fields.find(f => f.name === target);
+            const field = (currentType.fields ?? []).find(f => f.name === target);
             if (!field) return undefined;
             currentType = field.type;
             continue;
         }
 
         if (isNode(currentType, 'tupleTypeNode')) {
+            const items = currentType.items ?? [];
             const index = Number(fieldName);
-            if (!Number.isInteger(index) || index < 0 || index >= currentType.items.length) return undefined;
-            currentType = currentType.items[index];
+            if (!Number.isInteger(index) || index < 0 || index >= items.length) return undefined;
+            currentType = items[index];
             continue;
         }
 

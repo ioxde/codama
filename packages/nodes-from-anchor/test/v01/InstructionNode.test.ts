@@ -181,7 +181,7 @@ test('a foreign-program PDA seeded by an account-data field lifts AND adds the d
         },
     );
 
-    const dv = node.accounts.find(a => a.name === 'externalDataRecord')?.defaultValue;
+    const dv = (node.accounts ?? []).find(a => a.name === 'externalDataRecord')?.defaultValue;
     expect(isNode(dv, 'pdaValueNode')).toBe(true);
     expect(node.extraArguments ?? []).toEqual([
         instructionArgumentNode({ name: 'ownerKey', type: publicKeyTypeNode() }),
@@ -424,7 +424,7 @@ test('keeps one input for a field read by a top-level PDA and a prefixed-group P
         { definedTypes: [definedStruct('Pool', { mint: 'pubkey' })] },
     );
 
-    const seedInputNames = new Set(node.accounts.flatMap(a => seedArgNames(node, a.name)));
+    const seedInputNames = new Set((node.accounts ?? []).flatMap(a => seedArgNames(node, a.name)));
     expect(node.extraArguments).toHaveLength(1);
     expect(seedInputNames.size).toBe(1);
 });
@@ -473,9 +473,11 @@ test('keeps a data-field seed input distinct from a sibling bare-account seed sh
         { definedTypes: [definedStruct('Pool', { mint: 'pubkey' })] },
     );
 
-    const vault = node.accounts.find(a => a.name === 'vault')?.defaultValue;
+    const vault = (node.accounts ?? []).find(a => a.name === 'vault')?.defaultValue;
     const seedInputNames = isNode(vault, 'pdaValueNode')
-        ? vault.seeds.flatMap(s => (isNode(s.value, ['argumentValueNode', 'accountValueNode']) ? [s.value.name] : []))
+        ? (vault.seeds ?? []).flatMap(s =>
+              isNode(s.value, ['argumentValueNode', 'accountValueNode']) ? [s.value.name] : [],
+          )
         : [];
 
     expect(new Set(seedInputNames).size).toBe(seedInputNames.length);
@@ -510,15 +512,15 @@ test('synthesizes correctly-typed extraArguments when intra-PDA dedup collides w
         },
     );
 
-    const vault = node.accounts.find(a => a.name === 'vault')?.defaultValue;
+    const vault = (node.accounts ?? []).find(a => a.name === 'vault')?.defaultValue;
     assertIsNode(vault, 'pdaValueNode');
     assertIsNode(vault.pda, 'pdaNode');
     const typeByName = new Map((node.extraArguments ?? []).map(a => [a.name, a.type]));
 
     // All-variable seeds: pdaNode.seeds and pdaValueNode.seeds align by index.
-    vault.pda.seeds.forEach((seed, i) => {
+    (vault.pda.seeds ?? []).forEach((seed, i) => {
         if (!isNode(seed, 'variablePdaSeedNode')) return;
-        const value = vault.seeds[i]?.value;
+        const value = (vault.seeds ?? [])[i]?.value;
         if (!isNode(value, 'argumentValueNode')) return;
         expect(typeByName.get(value.name)).toEqual(seed.type);
     });
@@ -561,9 +563,9 @@ test('it gives an account-data tuple-index seed an identifier-shaped (non-digit)
         { definedTypes: [definedStruct('Config', { tup: { fields: ['u64'], kind: 'struct' } })] },
     );
 
-    const dv = node.accounts[1].defaultValue;
+    const dv = (node.accounts ?? [])[1].defaultValue;
     assertIsNode(dv, 'pdaValueNode');
-    for (const seedValue of dv.seeds) {
+    for (const seedValue of dv.seeds ?? []) {
         if (isNode(seedValue.value, 'argumentValueNode')) expect(seedValue.value.name).not.toMatch(/^\d/);
     }
     for (const arg of node.extraArguments ?? []) expect(arg.name).not.toMatch(/^\d/);
@@ -586,9 +588,9 @@ test('each cross-group derived PDA seeds from its own group field, regardless of
         definedTypes: [definedStruct('Pool', { first: 'pubkey', second: 'pubkey' })],
     });
 
-    const seedNamesPerPda = node.accounts.flatMap(a =>
+    const seedNamesPerPda = (node.accounts ?? []).flatMap(a =>
         isNode(a.defaultValue, 'pdaValueNode')
-            ? [a.defaultValue.seeds.map(s => (isNode(s.value, 'argumentValueNode') ? s.value.name : null))]
+            ? [(a.defaultValue.seeds ?? []).map(s => (isNode(s.value, 'argumentValueNode') ? s.value.name : null))]
             : [],
     );
     expect(seedNamesPerPda).toEqual([['first'], ['second']]);

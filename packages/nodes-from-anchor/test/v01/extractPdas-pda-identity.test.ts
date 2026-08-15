@@ -61,7 +61,7 @@ test('it unifies one PDA reached via an arg path and an account path into a sing
     );
 
     expect(result.pdas).toHaveLength(1);
-    expect(result.pdas[0].name).toBe('dataRecord');
+    expect((result.pdas ?? [])[0].name).toBe('dataRecord');
 });
 
 // Twin-pubkey PDAs with no const seed stay separate by seed name -- a pure-structural fingerprint
@@ -102,6 +102,6 @@ test('it keeps two distinct no-constant PDAs (escrow vs friendship) separate', (
 
     const result = extractPdasFromProgram(programNode({ instructions: [ixNode], name: 'test', publicKey: '1111' }));
 
-    const names = result.pdas.map(p => p.name).sort();
+    const names = (result.pdas ?? []).map(p => p.name).sort();
     expect(names).toEqual(['escrow', 'friendship']);
 });

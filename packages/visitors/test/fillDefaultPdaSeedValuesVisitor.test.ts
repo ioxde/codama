@@ -23,21 +23,19 @@ import { fillDefaultPdaSeedValuesVisitor } from '../src';
 
 test('it fills missing pda seed values with default values', () => {
     // Given a pdaNode with three variable seeds.
+    const pda = pdaNode({
+        name: 'myPda',
+        seeds: [
+            variablePdaSeedNode('seed1', numberTypeNode('u64')),
+            variablePdaSeedNode('seed2', numberTypeNode('u64')),
+            variablePdaSeedNode('seed3', publicKeyTypeNode()),
+        ],
+    });
     const program = programNode({
         name: 'myProgram',
-        pdas: [
-            pdaNode({
-                name: 'myPda',
-                seeds: [
-                    variablePdaSeedNode('seed1', numberTypeNode('u64')),
-                    variablePdaSeedNode('seed2', numberTypeNode('u64')),
-                    variablePdaSeedNode('seed3', publicKeyTypeNode()),
-                ],
-            }),
-        ],
+        pdas: [pda],
         publicKey: '1111',
     });
-    const pda = program.pdas[0];
 
     // And a linkable dictionary that recorded this PDA.
     const linkables = new LinkableDictionary();
@@ -74,21 +72,19 @@ test('it fills missing pda seed values with default values', () => {
 
 test('it fills nested pda value nodes', () => {
     // Given a pdaNode with three variable seeds.
+    const pda = pdaNode({
+        name: 'myPda',
+        seeds: [
+            variablePdaSeedNode('seed1', numberTypeNode('u64')),
+            variablePdaSeedNode('seed2', numberTypeNode('u64')),
+            variablePdaSeedNode('seed3', publicKeyTypeNode()),
+        ],
+    });
     const program = programNode({
         name: 'myProgram',
-        pdas: [
-            pdaNode({
-                name: 'myPda',
-                seeds: [
-                    variablePdaSeedNode('seed1', numberTypeNode('u64')),
-                    variablePdaSeedNode('seed2', numberTypeNode('u64')),
-                    variablePdaSeedNode('seed3', publicKeyTypeNode()),
-                ],
-            }),
-        ],
+        pdas: [pda],
         publicKey: '1111',
     });
-    const pda = program.pdas[0];
 
     // And a linkable dictionary that recorded this PDA.
     const linkables = new LinkableDictionary();
@@ -131,21 +127,19 @@ test('it fills nested pda value nodes', () => {
 
 test('it ignores default seeds missing from the instruction', () => {
     // Given a pdaNode with three variable seeds.
+    const pda = pdaNode({
+        name: 'myPda',
+        seeds: [
+            variablePdaSeedNode('seed1', numberTypeNode('u64')),
+            variablePdaSeedNode('seed2', numberTypeNode('u64')),
+            variablePdaSeedNode('seed3', publicKeyTypeNode()),
+        ],
+    });
     const program = programNode({
         name: 'myProgram',
-        pdas: [
-            pdaNode({
-                name: 'myPda',
-                seeds: [
-                    variablePdaSeedNode('seed1', numberTypeNode('u64')),
-                    variablePdaSeedNode('seed2', numberTypeNode('u64')),
-                    variablePdaSeedNode('seed3', publicKeyTypeNode()),
-                ],
-            }),
-        ],
+        pdas: [pda],
         publicKey: '1111',
     });
-    const pda = program.pdas[0];
 
     // And a linkable dictionary that recorded this PDA.
     const linkables = new LinkableDictionary();
@@ -173,12 +167,12 @@ test('it ignores default seeds missing from the instruction', () => {
 });
 
 test('it accepts nested-path argumentValueNode seeds in strict mode', () => {
+    const pda = pdaNode({ name: 'myPda', seeds: [variablePdaSeedNode('inputSeed', numberTypeNode('u8'))] });
     const program = programNode({
         name: 'myProgram',
-        pdas: [pdaNode({ name: 'myPda', seeds: [variablePdaSeedNode('inputSeed', numberTypeNode('u8'))] })],
+        pdas: [pda],
         publicKey: '1111',
     });
-    const pda = program.pdas[0];
     const linkables = new LinkableDictionary();
     linkables.recordPath([program, pda]);
 
@@ -198,13 +192,14 @@ test('it accepts nested-path argumentValueNode seeds in strict mode', () => {
 });
 
 test('it preserves pdaValueNode.programId', () => {
+    const pda = pdaNode({ name: 'myPda', seeds: [variablePdaSeedNode('seed1', numberTypeNode('u64'))] });
     const program = programNode({
         name: 'p',
-        pdas: [pdaNode({ name: 'myPda', seeds: [variablePdaSeedNode('seed1', numberTypeNode('u64'))] })],
+        pdas: [pda],
         publicKey: '11111111111111111111111111111111',
     });
     const linkables = new LinkableDictionary();
-    linkables.recordPath([program, program.pdas[0]]);
+    linkables.recordPath([program, pda]);
 
     const instruction = instructionNode({
         accounts: [instructionAccountNode({ isSigner: false, isWritable: false, name: 'foreignProg' })],

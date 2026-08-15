@@ -9,22 +9,25 @@ import {
 } from '@codama/errors';
 import type { Address } from '@solana/addresses';
 import type { ReadonlyUint8Array } from '@solana/codecs';
-import type {
-    AccountValueNode,
-    ArgumentValueNode,
-    BooleanValueNode,
-    BytesValueNode,
+import {
+    type AccountValueNode,
+    type ArgumentValueNode,
+    type BooleanValueNode,
+    type BytesValueNode,
     ConstantValueNode,
+    extendVisitor,
+    isNode,
+    Node,
     NoneValueNode,
     NumberValueNode,
-    ProgramIdValueNode,
-    PublicKeyValueNode,
-    SomeValueNode,
-    StringValueNode,
-    TypeNode,
-    Visitor,
+    type ProgramIdValueNode,
+    type PublicKeyValueNode,
+    type SomeValueNode,
+    type StringValueNode,
+    type TypeNode,
+    type Visitor,
+    visitOrElse,
 } from 'codama';
-import { isNode, visitOrElse } from 'codama';
 
 import { resolveAccountValueNodeAddress } from '../resolvers/resolve-account-value-node-address';
 import type { BaseResolutionContext } from '../resolvers/types';
@@ -34,9 +37,7 @@ import { getMemoizedAddressEncoder, getMemoizedBooleanEncoder, getMemoizedUtf8Co
 import { createCodecInputTransformer } from './codec-input-transformer';
 import { formatArgumentPathSuffix, resolveArgumentPathType, resolveArgumentPathValue } from './resolve-argument-path';
 
-export const PDA_SEED_VALUE_SUPPORTED_NODE_KINDS = [
-    'accountValueNode',
-    'argumentValueNode',
+export const CONSTANT_PDA_SEED_VALUE_SUPPORTED_NODE_KINDS = [
     'booleanValueNode',
     'bytesValueNode',
     'constantValueNode',
@@ -48,12 +49,22 @@ export const PDA_SEED_VALUE_SUPPORTED_NODE_KINDS = [
     'stringValueNode',
 ] as const;
 
+export const PDA_SEED_VALUE_SUPPORTED_NODE_KINDS = [
+    ...CONSTANT_PDA_SEED_VALUE_SUPPORTED_NODE_KINDS,
+    'accountValueNode',
+    'argumentValueNode',
+] as const;
+
 type PdaSeedValueSupportedNodeKind = (typeof PDA_SEED_VALUE_SUPPORTED_NODE_KINDS)[number];
 
-type PdaSeedValueVisitorContext = BaseResolutionContext & {
+export type ConstantPdaSeedValueVisitorContext = {
     programId: Address;
-    seedTypeNode?: TypeNode;
 };
+
+export type PdaSeedValueVisitorContext = BaseResolutionContext &
+    ConstantPdaSeedValueVisitorContext & {
+        seedTypeNode?: TypeNode;
+    };
 
 /**
  * Visitor for resolving PdaSeedValueNode value to raw bytes.
@@ -69,7 +80,9 @@ export function createPdaSeedValueVisitor(
     const accountsInput = ctx.accountsInput ?? {};
     const argumentsInput = ctx.argumentsInput ?? {};
 
-    return {
+    const base = createConstantPdaSeedValueVisitor({ programId });
+
+    const visitor: Visitor<Promise<ReadonlyUint8Array>, PdaSeedValueSupportedNodeKind> = extendVisitor(base, {
         visitAccountValue: async (node: AccountValueNode) => {
             const resolvedAddress = await resolveAccountValueNodeAddress(node, {
                 accountsInput,
@@ -90,8 +103,7 @@ export function createPdaSeedValueVisitor(
         },
 
         visitArgumentValue: async (node: ArgumentValueNode) => {
-            // Resolve against both serialized arguments and unserialized extraArguments.
-            const allArguments = [...ixNode.arguments, ...(ixNode.extraArguments ?? [])];
+            const allArguments = [...(ixNode.arguments ?? []), ...(ixNode.extraArguments ?? [])];
             const ixArgumentNode = allArguments.find(arg => arg.name === node.name);
             if (!ixArgumentNode) {
                 throw new CodamaError(CODAMA_ERROR__DYNAMIC_CLIENT__NODE_REFERENCE_NOT_FOUND, {
@@ -99,6 +111,7 @@ export function createPdaSeedValueVisitor(
                     referencedName: node.name,
                 });
             }
+            // ioxde fork: the `extraArguments` merge above, `node.path` and `argumentPath` are fork-added.
             // seedTypeNode (the seed's declared type) wins so bytes match the on-chain derivation.
             // Only walk the arg path when it's absent: otherwise the result is discarded, yet the
             // walk can still throw and fail an encode seedTypeNode + value would have completed.
@@ -131,6 +144,44 @@ export function createPdaSeedValueVisitor(
             return await Promise.resolve(codec.encode(transformedInput));
         },
 
+        // Override base recursion so wrapped account/argument values reach the extended handlers.
+        visitConstantValue: async node => await visitOrElse(node.value, visitor, unexpectedPdaSeedNodeFallback),
+
+        visitSomeValue: async node => await visitOrElse(node.value, visitor, unexpectedPdaSeedNodeFallback),
+    });
+
+    return visitor;
+}
+
+export const unexpectedPdaSeedNodeFallback = (node: Node): never => {
+    throw new CodamaError(CODAMA_ERROR__UNEXPECTED_NODE_KIND, {
+        expectedKinds: [...PDA_SEED_VALUE_SUPPORTED_NODE_KINDS],
+        kind: node.kind,
+        node,
+    });
+};
+
+/**
+ * Base PDA seed value visitor that handles constant seed kinds only
+ * (boolean / bytes / constant / none / number / programId / publicKey / some / string).
+ * The account/argument handlers throw by default and are meant to be extended if needed (e.g. for variable seeds).
+ */
+export function createConstantPdaSeedValueVisitor(
+    ctx: ConstantPdaSeedValueVisitorContext,
+): Visitor<Promise<ReadonlyUint8Array>, PdaSeedValueSupportedNodeKind> {
+    const { programId } = ctx;
+
+    const visitor: Visitor<Promise<ReadonlyUint8Array>, PdaSeedValueSupportedNodeKind> = {
+        // Throws error by default since constant seeds should not depend on accounts.
+        visitAccountValue: async (node: AccountValueNode) => {
+            return await Promise.resolve(unexpectedConstantPdaSeedNodeFallback(node));
+        },
+
+        // Throws error by default since constant seeds should not depend on arguments.
+        visitArgumentValue: async (node: ArgumentValueNode) => {
+            return await Promise.resolve(unexpectedConstantPdaSeedNodeFallback(node));
+        },
+
         visitBooleanValue: async (node: BooleanValueNode) =>
             await Promise.resolve(getMemoizedBooleanEncoder().encode(node.boolean)),
 
@@ -140,14 +191,7 @@ export function createPdaSeedValueVisitor(
         },
 
         visitConstantValue: async (node: ConstantValueNode) => {
-            const innerVisitor = createPdaSeedValueVisitor(ctx);
-            return await visitOrElse(node.value, innerVisitor, innerNode => {
-                throw new CodamaError(CODAMA_ERROR__UNEXPECTED_NODE_KIND, {
-                    expectedKinds: [...PDA_SEED_VALUE_SUPPORTED_NODE_KINDS],
-                    kind: innerNode.kind,
-                    node: innerNode,
-                });
-            });
+            return await visitOrElse(node.value, visitor, unexpectedConstantPdaSeedNodeFallback);
         },
 
         visitNoneValue: async (_node: NoneValueNode) => await Promise.resolve(new Uint8Array(0)),
@@ -171,17 +215,20 @@ export function createPdaSeedValueVisitor(
         },
 
         visitSomeValue: async (node: SomeValueNode) => {
-            const innerVisitor = createPdaSeedValueVisitor(ctx);
-            return await visitOrElse(node.value, innerVisitor, innerNode => {
-                throw new CodamaError(CODAMA_ERROR__UNEXPECTED_NODE_KIND, {
-                    expectedKinds: [...PDA_SEED_VALUE_SUPPORTED_NODE_KINDS],
-                    kind: innerNode.kind,
-                    node: innerNode,
-                });
-            });
+            return await visitOrElse(node.value, visitor, unexpectedConstantPdaSeedNodeFallback);
         },
 
         visitStringValue: async (node: StringValueNode) =>
             await Promise.resolve(getMemoizedUtf8Codec().encode(node.string)),
     };
+
+    return visitor;
 }
+
+export const unexpectedConstantPdaSeedNodeFallback = (node: Node) => {
+    throw new CodamaError(CODAMA_ERROR__UNEXPECTED_NODE_KIND, {
+        expectedKinds: [...CONSTANT_PDA_SEED_VALUE_SUPPORTED_NODE_KINDS],
+        kind: node.kind,
+        node,
+    });
+};

@@ -9,30 +9,20 @@ import {
 import type { Address, ProgramDerivedAddress } from '@solana/addresses';
 import { getProgramDerivedAddress } from '@solana/addresses';
 import type { ReadonlyUint8Array } from '@solana/codecs';
-import type { InstructionNode, PdaNode, RegisteredPdaSeedNode, RootNode, VariablePdaSeedNode } from 'codama';
-import { camelCase, isNode, visitOrElse } from 'codama';
+import type { PdaNode, RegisteredPdaSeedNode, RootNode, VariablePdaSeedNode } from 'codama';
+import { camelCase, isNode } from 'codama';
 
 import type { AddressInput } from '../shared/address';
 import { toAddress } from '../shared/address';
 import { getMemoizedUtf8Encoder } from '../shared/codecs';
 import { formatValueType, getMaybeNodeKind } from '../shared/util';
 import { createCodecInputTransformer } from '../visitors/codec-input-transformer';
-import { createPdaSeedValueVisitor, PDA_SEED_VALUE_SUPPORTED_NODE_KINDS } from '../visitors/pda-seed-value';
+import { resolveConstantPdaSeedValue } from './resolve-constant-pda-seed-value';
 
+// ioxde fork: `config` is fork-added API surface on `resolveStandalonePda`.
 export type StandalonePdaConfig = {
     /** Required for PDAs with a dynamic programId. */
     programAddress?: AddressInput;
-};
-
-/**
- * Minimal InstructionNode stub to satisfy constant PDA seeds requirements.
- * Constant seeds only use programIdValue / publicKeyValue / bytesValue / stringValue, none of which reference instruction arguments or accounts
- */
-const STANDALONE_IX_NODE: InstructionNode = {
-    accounts: [],
-    arguments: [],
-    kind: 'instructionNode',
-    name: '__standalone__' as InstructionNode['name'],
 };
 
 /**
@@ -47,9 +37,9 @@ export async function resolveStandalonePda(
 ): Promise<ProgramDerivedAddress> {
     const programAddress = toAddress(config.programAddress ?? pdaNode.programId ?? root.program.publicKey);
     const seedValues = await Promise.all(
-        pdaNode.seeds.map(async (seedNode): Promise<ReadonlyUint8Array> => {
+        (pdaNode.seeds ?? []).map(async (seedNode): Promise<ReadonlyUint8Array> => {
             if (seedNode.kind === 'constantPdaSeedNode') {
-                return await resolveStandaloneConstantSeed(root, programAddress, seedNode);
+                return await resolveStandaloneConstantSeed(programAddress, seedNode);
             }
             if (seedNode.kind === 'variablePdaSeedNode') {
                 return await resolveStandaloneVariableSeed(root, seedNode, seedInputs);
@@ -64,7 +54,6 @@ export async function resolveStandalonePda(
 }
 
 function resolveStandaloneConstantSeed(
-    root: RootNode,
     programAddress: Address,
     seedNode: RegisteredPdaSeedNode,
 ): Promise<ReadonlyUint8Array> {
@@ -75,22 +64,7 @@ function resolveStandaloneConstantSeed(
             node: seedNode,
         });
     }
-    const visitor = createPdaSeedValueVisitor({
-        accountsInput: undefined,
-        argumentsInput: undefined,
-        ixNode: STANDALONE_IX_NODE,
-        programId: programAddress,
-        resolutionPath: [],
-        resolversInput: undefined,
-        root,
-    });
-    return visitOrElse(seedNode.value, visitor, node => {
-        throw new CodamaError(CODAMA_ERROR__UNEXPECTED_NODE_KIND, {
-            expectedKinds: Array.from(PDA_SEED_VALUE_SUPPORTED_NODE_KINDS),
-            kind: node.kind,
-            node,
-        });
-    });
+    return resolveConstantPdaSeedValue(seedNode.value, { programId: programAddress });
 }
 
 function resolveStandaloneVariableSeed(

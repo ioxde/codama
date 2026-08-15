@@ -16,13 +16,18 @@ import { isOmittedArgument } from './shared';
  * Optional validation allows undefined so custom resolvers will fill default values after validation.
  */
 export function createArgumentsInputValidator(root: RootNode, ixNode: InstructionNode) {
-    // extraArguments are optional here; requiredness depends on accountsInput, which only the builder sees.
-    const dataArguments = ixNode.arguments.filter(arg => arg?.defaultValueStrategy !== 'omitted');
+    // ioxde fork: extraArguments are optional here; only the builder sees `accountsInput`, which decides requiredness.
+    const dataArguments = (ixNode.arguments ?? []).filter(arg => arg?.defaultValueStrategy !== 'omitted');
     const extraArguments = ixNode.extraArguments ?? [];
     const requiredArguments = [...dataArguments, ...extraArguments];
     const optionalArgumentNames = new Set(extraArguments.map(a => a.name));
     const validator = requiredArguments.length
-        ? createIxArgumentsValidator(ixNode.name, requiredArguments, root.program.definedTypes, optionalArgumentNames)
+        ? createIxArgumentsValidator(
+              ixNode.name,
+              requiredArguments,
+              root.program.definedTypes ?? [],
+              optionalArgumentNames,
+          )
         : null;
 
     return (argumentsInput: ArgumentsInput = {}) => {
@@ -84,7 +89,7 @@ function formatFailureValue(value: unknown): string {
  * Ensures that arguments with "omitted" defaultValueStrategy are not provided by the user (e.g. discriminator).
  */
 function validateOmittedArguments(ixNode: InstructionNode, argumentsInput: ArgumentsInput = {}) {
-    ixNode.arguments.filter(isOmittedArgument).forEach(ixArgumentNode => {
+    (ixNode.arguments ?? []).filter(isOmittedArgument).forEach(ixArgumentNode => {
         if (Object.hasOwn(argumentsInput, ixArgumentNode.name)) {
             throw new CodamaError(CODAMA_ERROR__DYNAMIC_CLIENT__FAILED_TO_VALIDATE_INPUT, {
                 message: 'Omitted argument must not be provided',

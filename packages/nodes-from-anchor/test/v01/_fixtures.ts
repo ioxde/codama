@@ -34,15 +34,15 @@ export function ix(
 
 // The argumentValueNode names of an account's resolved-PDA seeds (skips account/const seeds).
 export function seedArgNames(node: InstructionNode, accountName: string): string[] {
-    const dv = node.accounts.find(a => a.name === accountName)?.defaultValue;
+    const dv = (node.accounts ?? []).find(a => a.name === accountName)?.defaultValue;
     return isNode(dv, 'pdaValueNode')
-        ? dv.seeds.flatMap(s => (isNode(s.value, 'argumentValueNode') ? [s.value.name] : []))
+        ? (dv.seeds ?? []).flatMap(s => (isNode(s.value, 'argumentValueNode') ? [s.value.name] : []))
         : [];
 }
 
 // The argumentValueNode name of an account's first PDA seed value, if any.
 export function firstSeedInputName(node: InstructionNode, accountName: string): string | undefined {
-    const dv = node.accounts.find(a => a.name === accountName)?.defaultValue;
-    const value = isNode(dv, 'pdaValueNode') ? dv.seeds[0]?.value : undefined;
+    const dv = (node.accounts ?? []).find(a => a.name === accountName)?.defaultValue;
+    const value = isNode(dv, 'pdaValueNode') ? (dv.seeds ?? [])[0]?.value : undefined;
     return isNode(value, 'argumentValueNode') ? value.name : undefined;
 }

@@ -95,6 +95,7 @@ export function createAccountDefaultValueVisitor<
 
         visitArgumentValue: async (node: ArgumentValueNode) => {
             const rootArg = argumentsInput?.[node.name];
+            // ioxde fork: `node.path` and the `argumentPath` error context are fork-added.
             const argValue =
                 node.path && node.path.length > 0
                     ? resolveArgumentPathValue(rootArg, node.path, node.name, ixNode.name)

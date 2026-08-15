@@ -1,5 +1,49 @@
 # codama
 
+## 1.10.1
+
+### Patch Changes
+
+- Updated dependencies [[`f69845c`](https://github.com/codama-idl/codama/commit/f69845cb89ee0cc3877ee89a4b734386e9336074)]:
+    - @codama/nodes@1.10.1
+    - @codama/cli@1.6.1
+    - @codama/validators@1.10.1
+    - @codama/visitors@1.10.1
+    - @codama/errors@1.10.1
+
+## 1.10.0
+
+### Patch Changes
+
+- Updated dependencies [[`add9be2`](https://github.com/codama-idl/codama/commit/add9be28470d66ad2e99fab7688597ef7840cb4a), [`62af2ed`](https://github.com/codama-idl/codama/commit/62af2eda8827609dd5e04031d135de8190e6e6dc), [`61ac0a6`](https://github.com/codama-idl/codama/commit/61ac0a6d426802d35d0fe0a1eb4fc92b33b0d8a9), [`d3e7f01`](https://github.com/codama-idl/codama/commit/d3e7f01860a5f27c240cbff363826ab34ae5d87e)]:
+    - @codama/nodes@1.10.0
+    - @codama/validators@1.10.0
+    - @codama/cli@1.6.0
+    - @codama/errors@1.10.0
+    - @codama/visitors@1.10.0
+
+## 1.9.0
+
+### Patch Changes
+
+- Updated dependencies [[`f6deb59`](https://github.com/codama-idl/codama/commit/f6deb59dfe27fc94ff93d7c3166bc2f04567df3a), [`d3d9c1d`](https://github.com/codama-idl/codama/commit/d3d9c1dcab8be709b7047f7a259ad63f12cb160d)]:
+    - @codama/cli@1.5.4
+    - @codama/nodes@1.9.0
+    - @codama/validators@1.9.0
+    - @codama/visitors@1.9.0
+    - @codama/errors@1.9.0
+
+## 1.8.0
+
+### Patch Changes
+
+- Updated dependencies [[`0b3a781`](https://github.com/codama-idl/codama/commit/0b3a781c024b27397e17ad456f039f76382cb519)]:
+    - @codama/nodes@1.8.0
+    - @codama/errors@1.8.0
+    - @codama/cli@1.5.3
+    - @codama/validators@1.8.0
+    - @codama/visitors@1.8.0
+
 ## 1.7.0
 
 ### Patch Changes

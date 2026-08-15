@@ -9,6 +9,11 @@ export function registerGenerateClientTypesCommand(program: Command): void {
         .argument('<codama-idl>', 'Path to a Codama IDL JSON file (e.g., ./idl/codama.json)')
         .argument('<output-dir>', 'Path to the output directory for the generated .ts file, e.g., ./generated')
         .action((idlArg: string, outputDirArg: string) => {
-            generateClientTypesFromFile(idlArg, outputDirArg);
+            try {
+                generateClientTypesFromFile(idlArg, outputDirArg);
+            } catch (err) {
+                console.error(err);
+                process.exit(1);
+            }
         });
 }

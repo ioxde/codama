@@ -10,87 +10,36 @@ import type {
     RootNode,
 } from '@codama/node-types';
 
-import { camelCase, DocsInput, parseDocs } from './shared';
-
-export type ProgramNodeInput<
-    TPdas extends PdaNode[] = PdaNode[],
-    TAccounts extends AccountNode[] = AccountNode[],
-    TInstructions extends InstructionNode[] = InstructionNode[],
-    TDefinedTypes extends DefinedTypeNode[] = DefinedTypeNode[],
-    TErrors extends ErrorNode[] = ErrorNode[],
-    TEvents extends EventNode[] = EventNode[],
-    TConstants extends ConstantNode[] = ConstantNode[],
-> = Omit<
-    Partial<ProgramNode<TPdas, TAccounts, TInstructions, TDefinedTypes, TErrors, TEvents, TConstants>>,
-    'docs' | 'kind' | 'name' | 'publicKey'
-> & {
-    readonly docs?: DocsInput;
-    readonly name: string;
-    readonly publicKey: ProgramNode['publicKey'];
-};
-
-export function programNode<
-    const TPdas extends PdaNode[] = [],
-    const TAccounts extends AccountNode[] = [],
-    const TInstructions extends InstructionNode[] = [],
-    const TDefinedTypes extends DefinedTypeNode[] = [],
-    const TErrors extends ErrorNode[] = [],
-    const TEvents extends EventNode[] = [],
-    const TConstants extends ConstantNode[] = [],
->(
-    input: ProgramNodeInput<TPdas, TAccounts, TInstructions, TDefinedTypes, TErrors, TEvents, TConstants>,
-): ProgramNode<TPdas, TAccounts, TInstructions, TDefinedTypes, TErrors, TEvents, TConstants> {
-    return Object.freeze({
-        kind: 'programNode',
-
-        // Data.
-        name: camelCase(input.name),
-        publicKey: input.publicKey,
-        version: input.version ?? '0.0.0',
-        ...(input.origin !== undefined && { origin: input.origin }),
-        docs: parseDocs(input.docs),
-
-        // Children.
-        accounts: (input.accounts ?? []) as TAccounts,
-        instructions: (input.instructions ?? []) as TInstructions,
-        definedTypes: (input.definedTypes ?? []) as TDefinedTypes,
-        pdas: (input.pdas ?? []) as TPdas,
-        events: (input.events ?? []) as TEvents,
-        errors: (input.errors ?? []) as TErrors,
-        constants: (input.constants ?? []) as TConstants,
-    });
-}
-
 export function getAllPrograms(node: ProgramNode | ProgramNode[] | RootNode): ProgramNode[] {
     if (Array.isArray(node)) return node;
     if (node.kind === 'programNode') return [node];
-    return [node.program, ...node.additionalPrograms];
+    return [node.program, ...(node.additionalPrograms ?? [])];
 }
 
 export function getAllPdas(node: ProgramNode | ProgramNode[] | RootNode): PdaNode[] {
-    return getAllPrograms(node).flatMap(program => program.pdas);
+    return getAllPrograms(node).flatMap(program => program.pdas ?? []);
 }
 
 export function getAllAccounts(node: ProgramNode | ProgramNode[] | RootNode): AccountNode[] {
-    return getAllPrograms(node).flatMap(program => program.accounts);
+    return getAllPrograms(node).flatMap(program => program.accounts ?? []);
 }
 
 export function getAllEvents(node: ProgramNode | ProgramNode[] | RootNode): EventNode[] {
-    return getAllPrograms(node).flatMap(program => program.events);
+    return getAllPrograms(node).flatMap(program => program.events ?? []);
 }
 
 export function getAllDefinedTypes(node: ProgramNode | ProgramNode[] | RootNode): DefinedTypeNode[] {
-    return getAllPrograms(node).flatMap(program => program.definedTypes);
+    return getAllPrograms(node).flatMap(program => program.definedTypes ?? []);
 }
 
 export function getAllInstructions(node: ProgramNode | ProgramNode[] | RootNode): InstructionNode[] {
-    return getAllPrograms(node).flatMap(program => program.instructions);
+    return getAllPrograms(node).flatMap(program => program.instructions ?? []);
 }
 
 export function getAllErrors(node: ProgramNode | ProgramNode[] | RootNode): ErrorNode[] {
-    return getAllPrograms(node).flatMap(program => program.errors);
+    return getAllPrograms(node).flatMap(program => program.errors ?? []);
 }
 
 export function getAllConstants(node: ProgramNode | ProgramNode[] | RootNode): ConstantNode[] {
-    return getAllPrograms(node).flatMap(program => program.constants);
+    return getAllPrograms(node).flatMap(program => program.constants ?? []);
 }

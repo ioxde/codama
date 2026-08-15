@@ -122,7 +122,7 @@ describe('account-default-value: PDA seed value pairing', () => {
         const partial = pdaValueNode(pdaLinkNode('testPda'), [pdaSeedValueNode('owner', accountValueNode('owner'))]);
         const filled = visit(partial, fillDefaultPdaSeedValuesVisitor([program, instruction], linkables));
         if (!isNode(filled, 'pdaValueNode')) throw new Error('expected fillDefault to return a pdaValueNode');
-        expect(filled.seeds.map(s => s.name)).toEqual(['owner', 'authority']);
+        expect((filled.seeds ?? []).map(s => s.name)).toEqual(['owner', 'authority']);
 
         await expectVisitorDerivesPda(
             filled,

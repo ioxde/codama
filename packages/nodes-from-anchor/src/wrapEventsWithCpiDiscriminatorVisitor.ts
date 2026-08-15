@@ -58,7 +58,8 @@ export function wrapEventsWithCpiDiscriminatorVisitor(options: WrapEventsWithCpi
             select: '[programNode]',
             transform: node => {
                 assertIsNode(node, 'programNode');
-                if (node.events.length === 0) return node;
+                const events = node.events ?? [];
+                if (events.length === 0) return node;
 
                 let allowed: Set<string> | null;
                 if (filter) {
@@ -69,7 +70,7 @@ export function wrapEventsWithCpiDiscriminatorVisitor(options: WrapEventsWithCpi
                     allowed = null;
                 }
 
-                const newEvents = node.events.map(event => {
+                const newEvents = events.map(event => {
                     if (allowed && !allowed.has(event.name)) return event;
                     return wrapEvent(event, cpiConstant, cpiSize);
                 });
@@ -83,14 +84,14 @@ export function wrapEventsWithCpiDiscriminatorVisitor(options: WrapEventsWithCpi
 function wrapEvent(event: EventNode, cpiConstant: ConstantValueNode, cpiSize: number): EventNode {
     if (event.framing?.kind === 'anchorEventCpi') return event;
 
-    if (isNode(event.data, 'hiddenPrefixTypeNode') && event.data.prefix.length > 0) {
-        if (beginsWithCpi(event.data.prefix[0], cpiConstant)) {
-            return eventNode({ ...event, framing: anchorEventCpiFraming });
-        }
+    // ioxde fork: `hiddenPrefixTypeNode.prefix` is omitted when empty, so it may be absent here.
+    const existingPrefix = isNode(event.data, 'hiddenPrefixTypeNode') ? (event.data.prefix ?? []) : [];
+    if (existingPrefix.length > 0 && beginsWithCpi(existingPrefix[0], cpiConstant)) {
+        return eventNode({ ...event, framing: anchorEventCpiFraming });
     }
 
     const newData = isNode(event.data, 'hiddenPrefixTypeNode')
-        ? hiddenPrefixTypeNode(event.data.type, [cpiConstant, ...event.data.prefix])
+        ? hiddenPrefixTypeNode(event.data.type, [cpiConstant, ...existingPrefix])
         : hiddenPrefixTypeNode(event.data, [cpiConstant]);
 
     const shifted = (event.discriminators ?? []).map(d => shiftDiscriminator(d, cpiSize));

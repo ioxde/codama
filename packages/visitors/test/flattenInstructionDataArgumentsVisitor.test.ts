@@ -53,11 +53,13 @@ test('it keeps the remaining path when rewriting references deeper than the lift
     // Then we expect the reference to point at `inner` and keep the rest of the path,
     // and `inner` to survive as a top-level struct argument (one-level flattening).
     assertIsNode(result, 'rootNode');
-    const account = result.program.instructions[0].accounts[0];
+    const account = ((result.program.instructions ?? [])[0].accounts ?? [])[0];
     expect(account.defaultValue).toStrictEqual(
         pdaValueNode(pdaLinkNode('pda'), [pdaSeedValueNode('myField', argumentValueNode('inner', ['myField']))]),
     );
-    expect(result.program.instructions[0].arguments.map(argument => argument.name)).toStrictEqual(['inner']);
+    expect(((result.program.instructions ?? [])[0].arguments ?? []).map(argument => argument.name)).toStrictEqual([
+        'inner',
+    ]);
 });
 
 test('it rewrites PDA seed references to struct argument fields lifted by flattening', () => {
@@ -198,7 +200,7 @@ test('it does not rewrite references inside sub-instructions', () => {
     // own `args` reference to be left untouched.
     const result = visit(node, flattenInstructionDataArgumentsVisitor());
     assertIsNode(result, 'rootNode');
-    const sub = result.program.instructions[0].subInstructions![0];
-    expect(sub.accounts[0].defaultValue).toStrictEqual(argumentValueNode('args'));
-    expect(sub.arguments.map(argument => argument.name)).toStrictEqual(['args']);
+    const sub = (result.program.instructions ?? [])[0].subInstructions![0];
+    expect((sub.accounts ?? [])[0].defaultValue).toStrictEqual(argumentValueNode('args'));
+    expect((sub.arguments ?? []).map(argument => argument.name)).toStrictEqual(['args']);
 });

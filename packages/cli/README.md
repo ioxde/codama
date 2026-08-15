@@ -76,6 +76,12 @@ The Codama configuration file defines an object containing the following fields:
         "idl": "path/to/idl"
     }
     ```
+- `additionalIdls` (array): An array of paths to additional IDLs. Their programs are included alongside the main IDL's program (as `additionalPrograms`), so a single config can generate clients for multiple programs in an Anchor workspace.
+    ```json
+    {
+        "additionalIdls": ["path/to/other-idl", "path/to/third-idl"]
+    }
+    ```
 - `before` (array): An array of visitors that will run before every script. See [the next section](#using-visitors) for more details on how to use visitors in your configuration file.
     ```json
     {
@@ -180,7 +186,7 @@ In the example below, we remove the `mint` account, the `initializeMint` instruc
 
 Generates a JavaScript client for the IDL at the specified output path.
 
-See [`@codama/renderer-js`](https://github.com/codama-idl/renderers-js).
+See [`@codama/renderers-js`](https://github.com/codama-idl/renderers-js).
 
 ```json
 {

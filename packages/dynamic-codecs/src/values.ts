@@ -1,4 +1,8 @@
-import { CODAMA_ERROR__ENUM_VARIANT_NOT_FOUND, CodamaError } from '@codama/errors';
+import {
+    CODAMA_ERROR__DYNAMIC_CLIENT__INVARIANT_VIOLATION,
+    CODAMA_ERROR__ENUM_VARIANT_NOT_FOUND,
+    CodamaError,
+} from '@codama/errors';
 import { assertIsNode, bytesTypeNode, isNode, isScalarEnum, pascalCase, ValueNode } from '@codama/nodes';
 import { LinkableDictionary, NodeStack, pipe, recordNodeStackVisitor, visit, Visitor } from '@codama/visitors-core';
 
@@ -20,7 +24,7 @@ export function getValueNodeVisitor(
 
     const baseVisitor: Visitor<unknown, ValueNode['kind']> = {
         visitArrayValue(node) {
-            return node.items.map(item => visit(item, this));
+            return (node.items ?? []).map(item => visit(item, this));
         },
         visitBooleanValue(node) {
             return node.boolean;
@@ -38,15 +42,17 @@ export function getValueNodeVisitor(
         visitEnumValue(node) {
             const enumType = linkables.getOrThrow([...stack.getPath(node.kind), node.enum]).type;
             assertIsNode(enumType, 'enumTypeNode');
-            const variantIndex = enumType.variants.findIndex(variant => variant.name === node.variant);
+            const variants = enumType.variants ?? [];
+            const variantIndex = variants.findIndex(variant => variant.name === node.variant);
             if (variantIndex < 0) {
                 throw new CodamaError(CODAMA_ERROR__ENUM_VARIANT_NOT_FOUND, {
-                    enum: node.enum,
+                    // `node.enum` is the `definedTypeLinkNode`, not the `EnumTypeNode` this field declares.
+                    enum: enumType,
                     enumName: node.enum.name,
                     variant: node.variant,
                 });
             }
-            const variant = enumType.variants[variantIndex];
+            const variant = variants[variantIndex];
             if (isScalarEnum(enumType)) return variantIndex;
             const kind = { __kind: pascalCase(node.variant) };
             if (isNode(variant, 'enumEmptyVariantTypeNode')) return kind;
@@ -60,9 +66,19 @@ export function getValueNodeVisitor(
             }
             return kind;
         },
+        visitInjectedValue(node) {
+            // `injectedValueNode` is a placeholder resolved by the provide/inject graph
+            // at instruction-build / presentation time. By codec time the resolution
+            // pass should have replaced it with a concrete value; reaching this layer
+            // unresolved indicates an upstream pipeline bug, not a value this visitor
+            // can decode without ancestor context.
+            throw new CodamaError(CODAMA_ERROR__DYNAMIC_CLIENT__INVARIANT_VIOLATION, {
+                message: `injectedValueNode (key "${node.key}") reached codec evaluation; the provide/inject resolution pass must run first.`,
+            });
+        },
         visitMapValue(node) {
             return Object.fromEntries(
-                node.entries.map(entry => {
+                (node.entries ?? []).map(entry => {
                     const key = visit(entry.key, this);
                     const value = visit(entry.value, this);
                     return [key, value];
@@ -79,7 +95,7 @@ export function getValueNodeVisitor(
             return node.publicKey;
         },
         visitSetValue(node) {
-            return node.items.map(item => visit(item, this));
+            return (node.items ?? []).map(item => visit(item, this));
         },
         visitSomeValue(node) {
             const value = visit(node.value, this);
@@ -90,7 +106,7 @@ export function getValueNodeVisitor(
         },
         visitStructValue(node) {
             return Object.fromEntries(
-                node.fields.map(field => {
+                (node.fields ?? []).map(field => {
                     const name = field.name;
                     const value = visit(field.value, this);
                     return [name, value];
@@ -98,7 +114,7 @@ export function getValueNodeVisitor(
             );
         },
         visitTupleValue(node) {
-            return node.items.map(item => visit(item, this));
+            return (node.items ?? []).map(item => visit(item, this));
         },
     };
 

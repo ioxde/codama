@@ -13,6 +13,15 @@ export {
 export { isPublicKeyLike, isAddressConvertible, toAddress } from './shared/address';
 export { OPTIONAL_NODE_KINDS } from './shared/nodes';
 
+// ioxde fork: `createProgramClient`'s `pdas` proxy needs this at runtime. Import the module directly,
+// never the `./codegen` barrel — that re-exports `generateTypesFromFile`, pulling `node:fs` into the
+// browser and react-native bundles.
+export {
+    type CollectedPdaNode,
+    collectPdaNodeDetailsFromIdl,
+    collectPdaNodesFromIdl,
+} from './codegen/collect-pda-nodes';
+
 // Types
 export type { AccountsInput, ArgumentsInput, ResolverFn, ResolversInput, ResolverFnInput } from './shared/types';
 export type { AddressInput, PublicKeyLike } from './shared/address';

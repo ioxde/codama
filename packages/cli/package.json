@@ -1,6 +1,6 @@
 {
     "name": "@codama/cli",
-    "version": "1.5.2",
+    "version": "1.6.1",
     "description": "A CLI for setting up and managing Codama IDLs",
     "exports": {
         "types": "./dist/types/index.d.ts",
@@ -43,7 +43,7 @@
         "@codama/nodes": "workspace:*",
         "@codama/visitors": "workspace:*",
         "@codama/visitors-core": "workspace:*",
-        "commander": "^14.0.2",
+        "commander": "^15.0.0",
         "picocolors": "^1.1.1",
         "prompts": "^2.4.2"
     },
