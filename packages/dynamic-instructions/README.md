@@ -131,6 +131,8 @@ type InstructionDisplay = {
 };
 ```
 
+The `interpolatedIntent` template substitutes two placeholder forms: `${data.<argument>}` for a decoded instruction argument and `${accounts.<account>}` for a named account's address. A `data` placeholder may dot into a nested field — `${data.plan.amount}` reads the `amount` field of the `plan` struct argument, and numeric segments index tuple or array items (`${data.pair.1}`) — following `definedTypeLinkNode`s and unwrapping options along the way, with the leaf's display metadata (e.g. amount scaling) applied. Accounts have no nested structure, so `accounts` placeholders take a single name. Resolution is all-or-nothing: if any placeholder is malformed or cannot be resolved — including a nested path that crosses a `None` option — `interpolatedIntent` is `null` and the renderer falls back to `fields`, since partial prose on a signing screen is worse than none. A nested amount addressed by a placeholder counts as surfaced like any other displayed amount: its injected inputs mark their backing members consumed for the `whenInjected` skip rule, and the offline-dictionary planner pre-fetches the accounts they read.
+
 ### `getInstructionDisplay(root, instruction, options?)`
 
 Parses a raw `Instruction` (`@solana/instructions`) against the root and resolves its display. Returns `null` when the instruction cannot be identified or decoded (e.g. an instruction from an unknown program).

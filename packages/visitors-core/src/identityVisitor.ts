@@ -58,31 +58,43 @@ export function identityVisitor<TNodeKind extends NodeKind = NodeKind>(
         (node: Node): Node | null =>
             keys.includes(node.kind) ? baseVisit(node, v) : Object.freeze({ ...node });
 
+    // Every arm below, including the downgrades to an empty variant, must carry `discriminator` and
+    // `display` through; dropping the discriminator changes the variant's wire value and so the bytes.
+    const visitEnumVariantDisplay = (self: Visitor<Node | null>, display: Node | undefined) => {
+        if (!display) return undefined;
+        const visited = visit(self)(display);
+        if (visited === null) return undefined;
+        assertIsNode(visited, 'enumVariantDisplayNode');
+        return visited;
+    };
+
     if (keys.includes('enumStructVariantTypeNode' as TNodeKind)) {
         overrides.visitEnumStructVariantType = function visitEnumStructVariantType(node, { self }) {
+            const display = visitEnumVariantDisplay(self, node.display);
             const newStruct = visit(self)(node.struct);
             if (!newStruct) {
-                return enumEmptyVariantTypeNode(node.name);
+                return enumEmptyVariantTypeNode(node.name, node.discriminator, { display });
             }
             assertIsNode(newStruct, 'structTypeNode');
             if ((newStruct.fields ?? []).length === 0) {
-                return enumEmptyVariantTypeNode(node.name);
+                return enumEmptyVariantTypeNode(node.name, node.discriminator, { display });
             }
-            return enumStructVariantTypeNode(node.name, newStruct, node.discriminator);
+            return enumStructVariantTypeNode(node.name, newStruct, node.discriminator, { display });
         };
     }
 
     if (keys.includes('enumTupleVariantTypeNode' as TNodeKind)) {
         overrides.visitEnumTupleVariantType = function visitEnumTupleVariantType(node, { self }) {
+            const display = visitEnumVariantDisplay(self, node.display);
             const newTuple = visit(self)(node.tuple);
             if (!newTuple) {
-                return enumEmptyVariantTypeNode(node.name);
+                return enumEmptyVariantTypeNode(node.name, node.discriminator, { display });
             }
             assertIsNode(newTuple, 'tupleTypeNode');
             if ((newTuple.items ?? []).length === 0) {
-                return enumEmptyVariantTypeNode(node.name);
+                return enumEmptyVariantTypeNode(node.name, node.discriminator, { display });
             }
-            return enumTupleVariantTypeNode(node.name, newTuple, node.discriminator);
+            return enumTupleVariantTypeNode(node.name, newTuple, node.discriminator, { display });
         };
     }
 

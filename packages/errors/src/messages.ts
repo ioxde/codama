@@ -112,7 +112,7 @@ export const CodamaErrorMessages: Readonly<{
         'Instruction [$instructionName] not found in IDL. Available: [$availableIxs].',
     [CODAMA_ERROR__DYNAMIC_CLIENT__INVALID_ACCOUNT_ADDRESS]: 'Invalid account address [$accountName]: [$value].',
     [CODAMA_ERROR__DYNAMIC_CLIENT__INVALID_ARGUMENT_INPUT]:
-        'Invalid argument input [$argumentName]: [$value]. Expected [$expectedType].',
+        'Invalid argument input [$argumentName$argumentPath]: [$value]. Expected [$expectedType].',
     [CODAMA_ERROR__DYNAMIC_CLIENT__INVARIANT_VIOLATION]: 'Internal invariant violation: [$message].',
     [CODAMA_ERROR__DYNAMIC_CLIENT__NODE_REFERENCE_NOT_FOUND]:
         'Referenced node [$referencedName] not found in [$instructionName].',

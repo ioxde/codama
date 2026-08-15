@@ -4,6 +4,7 @@ import {
     amountNumberDisplayNode,
     argumentValueNode,
     arrayTypeNode,
+    type CamelCaseString,
     definedTypeLinkNode,
     definedTypeNode,
     injectedValueNode,
@@ -28,6 +29,7 @@ import { displayContext, mockResolveDefinedType, parsedInstruction } from '../te
 const AUTHORITY = '86xCnPeV69n6t3DnyGvkKobf9FdN2H9oiVDdaMpo2MMY' as Address;
 const SIGNER_A = '3Wnd5Df69KitZfUoPYZU438eFRNwGHkhLnSAWL65PxJX' as Address;
 const SIGNER_B = '9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM' as Address;
+const NON_SIGNER = '86xCnPeV69n6t3DnyGvkKobf9FdN2H9oiVDdaMpo2MMY' as Address;
 const SOURCE_A = 'Fg6PaFpoGXkYsidMpWTK6W2BeZ7FEfcYkg476zPFsLnS' as Address;
 const SOURCE_B = 'DRpbCBMxVnDK7maPM5tGv6MvB3v1sRMC86PZ8okm21hy' as Address;
 
@@ -56,6 +58,31 @@ describe('listFallback', () => {
             { label: 'Amount', value: '42' },
             { label: 'Destination', value: AUTHORITY },
         ]);
+    });
+
+    test('it lists an account whose parsed account name is not normalised', async () => {
+        // Given a parsed instruction carrying a `Destination`-cased account name.
+        const instruction = instructionNode({
+            accounts: [instructionAccountNode({ isSigner: false, isWritable: true, name: 'destination' })],
+            arguments: [],
+            name: 'transfer',
+        });
+        const base = parsedInstruction({ instruction });
+
+        // When we build the fallback list.
+        const result = await listFallback(
+            displayContext({
+                parsedInstruction: {
+                    ...base,
+                    accounts: [
+                        { address: AUTHORITY, name: 'Destination' as CamelCaseString, role: AccountRole.READONLY },
+                    ],
+                },
+            }),
+        );
+
+        // Then the account still renders, matched through camelCase.
+        expect(result).toEqual([{ label: 'Destination', value: AUTHORITY }]);
     });
 
     test('it honours explicit labels for arguments and accounts', async () => {
@@ -172,6 +199,159 @@ describe('listFallback', () => {
         expect(result).toEqual([{ label: 'Decimals', value: '6' }]);
     });
 
+    test('it hides a whenInjected field of a flattened struct keyed on its dotted reference', async () => {
+        // Given a flattened struct whose `decimals` field is whenInjected.
+        const instruction = instructionNode({
+            accounts: [],
+            arguments: [
+                instructionArgumentNode({
+                    display: structFieldDisplayNode({ flatten: true }),
+                    name: 'planData',
+                    type: structTypeNode([
+                        structFieldTypeNode({
+                            display: structFieldDisplayNode({ skip: 'whenInjected' }),
+                            name: 'decimals',
+                            type: numberTypeNode('u8'),
+                        }),
+                        structFieldTypeNode({ name: 'amount', type: numberTypeNode('u64') }),
+                    ]),
+                }),
+            ],
+            name: 'transfer',
+        });
+
+        const result = await listFallback(
+            displayContext({
+                consumedMemberNames: new Set(['planData.decimals']),
+                parsedInstruction: parsedInstruction({
+                    data: { planData: { amount: 42n, decimals: 6 } },
+                    instruction,
+                }),
+            }),
+        );
+
+        // Then we expect only the sibling field.
+        expect(result).toEqual([{ label: 'Amount', value: '42' }]);
+    });
+
+    test('it hides a whenInjected flattened field when a member nested below it was consumed', async () => {
+        // Given a flattened struct whose whenInjected `terms` field is itself a struct.
+        const instruction = instructionNode({
+            accounts: [],
+            arguments: [
+                instructionArgumentNode({
+                    display: structFieldDisplayNode({ flatten: true }),
+                    name: 'planData',
+                    type: structTypeNode([
+                        structFieldTypeNode({
+                            display: structFieldDisplayNode({ skip: 'whenInjected' }),
+                            name: 'terms',
+                            type: structTypeNode([
+                                structFieldTypeNode({ name: 'decimals', type: numberTypeNode('u8') }),
+                            ]),
+                        }),
+                        structFieldTypeNode({ name: 'amount', type: numberTypeNode('u64') }),
+                    ]),
+                }),
+            ],
+            name: 'transfer',
+        });
+
+        const result = await listFallback(
+            displayContext({
+                consumedMemberNames: new Set(['planData.terms.decimals']),
+                parsedInstruction: parsedInstruction({
+                    data: { planData: { amount: 42n, terms: { decimals: 6 } } },
+                    instruction,
+                }),
+            }),
+        );
+
+        // Then we expect `terms` hidden and its sibling still visible.
+        expect(result).toEqual([{ label: 'Amount', value: '42' }]);
+    });
+
+    test('it hides a whenInjected argument when a member nested below it was consumed', async () => {
+        // Given a non-flattened whenInjected struct argument.
+        const instruction = instructionNode({
+            accounts: [],
+            arguments: [
+                instructionArgumentNode({
+                    display: structFieldDisplayNode({ skip: 'whenInjected' }),
+                    name: 'planData',
+                    type: structTypeNode([structFieldTypeNode({ name: 'decimals', type: numberTypeNode('u8') })]),
+                }),
+            ],
+            name: 'transfer',
+        });
+
+        const result = await listFallback(
+            displayContext({
+                consumedMemberNames: new Set(['planData.decimals']),
+                parsedInstruction: parsedInstruction({ data: { planData: { decimals: 6 } }, instruction }),
+            }),
+        );
+
+        // Then we expect the whole argument hidden.
+        expect(result).toEqual([]);
+    });
+
+    test('it does not hide a member when a consumed name merely shares its name as a string prefix', async () => {
+        // Given a whenInjected `plan` argument while `planData.decimals` was consumed.
+        const instruction = instructionNode({
+            accounts: [],
+            arguments: [
+                instructionArgumentNode({
+                    display: structFieldDisplayNode({ skip: 'whenInjected' }),
+                    name: 'plan',
+                    type: numberTypeNode('u8'),
+                }),
+            ],
+            name: 'transfer',
+        });
+
+        const result = await listFallback(
+            displayContext({
+                consumedMemberNames: new Set(['planData.decimals']),
+                parsedInstruction: parsedInstruction({ data: { plan: 1 }, instruction }),
+            }),
+        );
+
+        // Then the argument stays visible: dot-boundary matching, not string-prefix matching.
+        expect(result).toEqual([{ label: 'Plan', value: '1' }]);
+    });
+
+    test('it does not hide a flattened struct field when only its bare name was consumed', async () => {
+        // Given the same flattened struct, but `decimals` consumed as a bare name from elsewhere.
+        const instruction = instructionNode({
+            accounts: [],
+            arguments: [
+                instructionArgumentNode({
+                    display: structFieldDisplayNode({ flatten: true }),
+                    name: 'planData',
+                    type: structTypeNode([
+                        structFieldTypeNode({
+                            display: structFieldDisplayNode({ skip: 'whenInjected' }),
+                            name: 'decimals',
+                            type: numberTypeNode('u8'),
+                        }),
+                    ]),
+                }),
+            ],
+            name: 'transfer',
+        });
+
+        const result = await listFallback(
+            displayContext({
+                consumedMemberNames: new Set(['decimals']),
+                parsedInstruction: parsedInstruction({ data: { planData: { decimals: 6 } }, instruction }),
+            }),
+        );
+
+        // Then the nested field stays visible: `decimals` names a different member.
+        expect(result).toEqual([{ label: 'Decimals', value: '6' }]);
+    });
+
     test('it flattens a linked struct argument with a prefix', async () => {
         // Given an argument whose type links to a struct and is flattened with a prefix.
         const orderArgs = definedTypeNode({
@@ -266,6 +446,132 @@ describe('listFallback', () => {
 
         // Then we expect the title-cased value name as label, unnumbered for a single account.
         expect(result).toEqual([{ label: 'Multi Signers', value: SIGNER_A }]);
+    });
+
+    test('it derives the remaining accounts label from the leaf segment of a path-bearing group value', async () => {
+        // Given a group whose value addresses a field of a struct argument.
+        const instruction = instructionNode({
+            accounts: [],
+            arguments: [],
+            name: 'transfer',
+            remainingAccounts: [
+                instructionRemainingAccountsNode(argumentValueNode('data', ['multiSigners']), { isSigner: true }),
+            ],
+        });
+
+        const result = await listFallback(
+            displayContext({
+                parsedInstruction: parsedInstruction({
+                    instruction,
+                    remainingAccounts: [[SIGNER_A, AccountRole.READONLY_SIGNER]],
+                }),
+            }),
+        );
+
+        // Then we expect the leaf field's name, not the root argument's.
+        expect(result).toEqual([{ label: 'Multi Signers', value: SIGNER_A }]);
+    });
+
+    test('it hides a whenInjected remaining-accounts group keyed on its dotted reference', async () => {
+        // Given a whenInjected group whose value addresses a field of a struct argument.
+        const instruction = instructionNode({
+            accounts: [],
+            arguments: [],
+            name: 'transfer',
+            remainingAccounts: [
+                instructionRemainingAccountsNode(argumentValueNode('data', ['multiSigners']), {
+                    display: instructionAccountDisplayNode({ skip: 'whenInjected' }),
+                    isSigner: true,
+                }),
+            ],
+        });
+
+        const result = await listFallback(
+            displayContext({
+                consumedMemberNames: new Set(['data.multiSigners']),
+                parsedInstruction: parsedInstruction({
+                    instruction,
+                    remainingAccounts: [[SIGNER_A, AccountRole.READONLY_SIGNER]],
+                }),
+            }),
+        );
+
+        // Then we expect the group to be hidden.
+        expect(result).toEqual([]);
+    });
+
+    test('it renders metas the declared groups cannot claim under the generic label', async () => {
+        // Given a single non-signer group but a trailing meta that signs.
+        const instruction = instructionNode({
+            accounts: [],
+            arguments: [],
+            name: 'transfer',
+            remainingAccounts: [instructionRemainingAccountsNode(argumentValueNode('delegates'), { isSigner: false })],
+        });
+
+        const result = await listFallback(
+            displayContext({
+                parsedInstruction: parsedInstruction({
+                    instruction,
+                    remainingAccounts: [[SIGNER_A, AccountRole.READONLY_SIGNER]],
+                }),
+            }),
+        );
+
+        // Then the unattributable meta renders generically instead of under the group's label.
+        expect(result).toEqual([{ label: 'Remaining Accounts', value: SIGNER_A }]);
+    });
+
+    test('it stops attributing to a group at the first meta whose role stops matching', async () => {
+        // Given a signers group and interleaved trailing metas: signer, non-signer, signer.
+        const instruction = instructionNode({
+            accounts: [],
+            arguments: [],
+            name: 'transfer',
+            remainingAccounts: [instructionRemainingAccountsNode(argumentValueNode('signers'), { isSigner: true })],
+        });
+
+        const result = await listFallback(
+            displayContext({
+                parsedInstruction: parsedInstruction({
+                    instruction,
+                    remainingAccounts: [
+                        [SIGNER_A, AccountRole.READONLY_SIGNER],
+                        [NON_SIGNER, AccountRole.READONLY],
+                        [SIGNER_B, AccountRole.READONLY_SIGNER],
+                    ],
+                }),
+            }),
+        );
+
+        // Then only the leading run carries the group's label; the rest render generically.
+        expect(result).toEqual([
+            { label: 'Signers', value: SIGNER_A },
+            { label: 'Remaining Accounts #1', value: NON_SIGNER },
+            { label: 'Remaining Accounts #2', value: SIGNER_B },
+        ]);
+    });
+
+    test('it renders trailing metas generically when the instruction declares no groups', async () => {
+        const instruction = instructionNode({ accounts: [], arguments: [], name: 'transfer' });
+
+        const result = await listFallback(
+            displayContext({
+                parsedInstruction: parsedInstruction({
+                    instruction,
+                    remainingAccounts: [
+                        [SIGNER_A, AccountRole.READONLY_SIGNER],
+                        [SIGNER_B, AccountRole.READONLY],
+                    ],
+                }),
+            }),
+        );
+
+        // Then the accounts the user signs over stay visible, under the generic label.
+        expect(result).toEqual([
+            { label: 'Remaining Accounts #1', value: SIGNER_A },
+            { label: 'Remaining Accounts #2', value: SIGNER_B },
+        ]);
     });
 
     test('it hides remaining accounts whose group is skipped', async () => {

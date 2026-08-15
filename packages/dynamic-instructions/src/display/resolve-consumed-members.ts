@@ -1,5 +1,6 @@
 import { isNode, type Node } from 'codama';
 
+import { argumentReferenceName } from './argument-reference';
 import { collectInjectedNodes } from './collect-injected-nodes';
 import { resolveInjectedValue } from './resolve-injected-value';
 import { resolveInjectionTarget } from './resolve-injection-target';
@@ -17,7 +18,8 @@ type BaseDisplayContext = Omit<DisplayContext, 'consumedMemberNames'>;
  *
  * Two independent gates must both hold for a member to count as consumed:
  * - *rendered*: the injection point is actually displayed (see {@link collectInjectedNodes}, which
- *   is flatten-aware — an amount buried in a non-flattened struct is never surfaced);
+ *   is flatten-aware — an amount buried in a non-flattened struct is only surfaced when the intent
+ *   template dots into it);
  * - *resolved*: the injection resolves to a concrete value. When it cannot (e.g. no `fetchAccount`
  *   offline, or the account does not exist), the member is not consumed and remains visible — which
  *   is what distinguishes the metadata-rich and offline fallback presentations.
@@ -61,5 +63,7 @@ export async function resolveConsumedMemberNames(displayContext: BaseDisplayCont
 function collectReferencedMembers(node: Node, members: Set<string>): void {
     if (isNode(node, 'accountValueNode')) members.add(node.name);
     else if (isNode(node, 'accountFieldValueNode')) members.add(node.account);
-    else if (isNode(node, 'argumentValueNode')) members.add(node.name);
+    // ioxde fork: an `argumentValueNode` with a `path` consumes the field it addresses, not its
+    // root argument — the root still has unsurfaced siblings, so hiding it would lose them.
+    else if (isNode(node, 'argumentValueNode')) members.add(argumentReferenceName(node));
 }

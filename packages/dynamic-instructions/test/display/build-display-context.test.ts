@@ -1,5 +1,7 @@
 import type { Address } from '@solana/addresses';
 import {
+    accountLinkNode,
+    accountNode,
     definedTypeLinkNode,
     definedTypeNode,
     enumEmptyVariantTypeNode,
@@ -12,11 +14,13 @@ import {
     numberTypeNode,
     numberValueNode,
     providedNode,
+    structFieldTypeNode,
+    structTypeNode,
 } from 'codama';
 import { describe, expect, test } from 'vitest';
 
 import { buildDisplayContext } from '../../src/display/build-display-context';
-import { makeParsedInstruction, makeRoot } from '../test-utils';
+import { makeParsedInstruction, makeRoot, mintAccountNode } from '../test-utils';
 
 const MINT = '86xCnPeV69n6t3DnyGvkKobf9FdN2H9oiVDdaMpo2MMY' as Address;
 
@@ -113,6 +117,56 @@ describe('buildDisplayContext', () => {
 
         // Then we get undefined.
         expect(resolvedPath).toBeUndefined();
+    });
+
+    test('it decodes account bytes that conform to the linked layout', async () => {
+        // Given an account linked to a mint layout with one u8 field.
+        const instruction = instructionNode({
+            accounts: [
+                instructionAccountNode({
+                    accountLink: accountLinkNode('mint'),
+                    isSigner: false,
+                    isWritable: false,
+                    name: 'mint',
+                }),
+            ],
+            arguments: [],
+            name: 'transfer',
+        });
+        const root = makeRoot([instruction], 'testProgram', [mintAccountNode()]);
+        const parsed = makeParsedInstruction(root, instruction, {}, new Map([['mint', MINT]]));
+
+        // When we decode one conforming byte.
+        const context = await buildDisplayContext(root, parsed);
+        expect(context.resolveAccountData('mint', new Uint8Array([6]))).toEqual({ decimals: 6 });
+    });
+
+    test('it returns null when account bytes do not decode against the linked layout', async () => {
+        // Given an account linked to a layout requiring one u64 (8 bytes).
+        const vault = accountNode({
+            data: structTypeNode([structFieldTypeNode({ name: 'amount', type: numberTypeNode('u64') })]),
+            name: 'vault',
+        });
+        const instruction = instructionNode({
+            accounts: [
+                instructionAccountNode({
+                    accountLink: accountLinkNode('vault'),
+                    isSigner: false,
+                    isWritable: false,
+                    name: 'vault',
+                }),
+            ],
+            arguments: [],
+            name: 'transfer',
+        });
+        const root = makeRoot([instruction], 'testProgram', [vault]);
+        const parsed = makeParsedInstruction(root, instruction, {}, new Map([['vault', MINT]]));
+
+        // When we decode truncated bytes.
+        const context = await buildDisplayContext(root, parsed);
+
+        // Then decoding degrades to null instead of throwing and killing the display.
+        expect(context.resolveAccountData('vault', new Uint8Array([1, 2]))).toBeNull();
     });
 
     test('it threads the fetchAccount option through', async () => {

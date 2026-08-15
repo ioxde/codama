@@ -104,3 +104,24 @@ test('it returns data enum values as objects', () => {
     expect(resultWrite).toStrictEqual({ __kind: 'Write', fields: ['Hello'] });
     expect(resultMove).toStrictEqual({ __kind: 'Move', x: 10, y: 20 });
 });
+
+test('it returns explicit discriminators for scalar enum values', () => {
+    // Given a scalar enum with explicit discriminators, out of order.
+    const definedType = definedTypeNode({
+        name: 'decision',
+        type: enumTypeNode([enumEmptyVariantTypeNode('cancel', 1), enumEmptyVariantTypeNode('confirm', 0)]),
+    });
+    const root = rootNode(programNode({ definedTypes: [definedType], name: 'myProgram', publicKey: '1111' }));
+    const linkables = new LinkableDictionary();
+    linkables.recordPath([root, root.program, definedType]);
+    const stack = new NodeStack([root, root.program]);
+    const visitor = getValueNodeVisitor(linkables, { stack });
+
+    // When we visit enum value nodes for this enum type.
+    const resultCancel = visit(enumValueNode('decision', 'cancel'), visitor);
+    const resultConfirm = visit(enumValueNode('decision', 'confirm'), visitor);
+
+    // Then we get each variant's wire discriminator, not its position.
+    expect(resultCancel).toBe(1);
+    expect(resultConfirm).toBe(0);
+});

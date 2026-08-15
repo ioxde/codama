@@ -63,3 +63,40 @@ export function resolveDisplayType(
 
     return { ownerPath: resolvedOwnerPath, type: resolvedType };
 }
+
+/**
+ * Segment syntax mirrors `ArgumentValueNode.path`, extended to array indices. Only the value walk
+ * bounds-checks an array index, since every item shares one type; the leaf type comes back unresolved.
+ */
+export function resolveDisplayTypePath(
+    type: TypeNode,
+    ownerPath: NodePath,
+    segments: readonly string[],
+    displayContext: Omit<DisplayContext, 'consumedMemberNames'>,
+): ResolvedDisplayType | null {
+    let current: ResolvedDisplayType = { ownerPath, type };
+    for (const segment of segments) {
+        const resolved = resolveDisplayType(current.type, current.ownerPath, displayContext);
+        if (isNode(resolved.type, 'structTypeNode')) {
+            const field = (resolved.type.fields ?? []).find(f => f.name === segment);
+            if (!field) return null;
+            current = { ownerPath: [...resolved.ownerPath, field], type: field.type };
+            continue;
+        }
+        if (isNode(resolved.type, 'tupleTypeNode')) {
+            const items = resolved.type.items ?? [];
+            const index = Number(segment);
+            if (!Number.isInteger(index) || index < 0 || index >= items.length) return null;
+            current = { ownerPath: resolved.ownerPath, type: items[index] };
+            continue;
+        }
+        if (isNode(resolved.type, 'arrayTypeNode')) {
+            const index = Number(segment);
+            if (!Number.isInteger(index) || index < 0) return null;
+            current = { ownerPath: resolved.ownerPath, type: resolved.type.item };
+            continue;
+        }
+        return null;
+    }
+    return current;
+}

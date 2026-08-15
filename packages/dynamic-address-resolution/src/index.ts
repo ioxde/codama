@@ -7,6 +7,9 @@ export {
     createCodecInputTransformer,
     createDefaultValueEncoderVisitor,
     DEFAULT_VALUE_ENCODER_SUPPORTED_NODE_KINDS,
+    // ioxde fork: path helpers, consumed by @codama/dynamic-instructions.
+    formatArgumentPathSuffix,
+    tryResolveArgumentPathValue,
 } from './visitors';
 
 // Helpers

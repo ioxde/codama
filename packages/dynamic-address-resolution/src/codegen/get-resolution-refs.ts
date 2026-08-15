@@ -40,7 +40,8 @@ export function getResolutionRefs(ix: InstructionNode): ResolutionRefs {
 
     const args = (ix.arguments ?? []).filter(arg => arg.defaultValueStrategy !== 'omitted');
     const remainingAccountArgs = (ix.remainingAccounts ?? []).filter(ra => ra.value.kind === 'argumentValueNode');
-    const hasArgs = args.length > 0 || remainingAccountArgs.length > 0;
+    const hasArgs = args.length > 0 || remainingAccountArgs.length > 0 || (ix.extraArguments ?? []).length > 0;
+    // extraArguments stay out of this — they never make the args parameter required.
     const hasRequiredArgs = args.some(arg => !OPTIONAL_NODE_KINDS.includes(arg.type.kind));
     const hasRequiredRemainingAccounts = remainingAccountArgs.some(ra => !ra.isOptional);
 

@@ -4,7 +4,13 @@ import type {
     ResolverFnInput,
     ResolversInput,
 } from '@codama/dynamic-address-resolution';
-import { isAddressConvertible, resolveInstructionAccountAddress, toAddress } from '@codama/dynamic-address-resolution';
+import {
+    formatArgumentPathSuffix,
+    isAddressConvertible,
+    resolveInstructionAccountAddress,
+    toAddress,
+    tryResolveArgumentPathValue,
+} from '@codama/dynamic-address-resolution';
 import {
     CODAMA_ERROR__DYNAMIC_CLIENT__ARGUMENT_MISSING,
     CODAMA_ERROR__DYNAMIC_CLIENT__INVALID_ARGUMENT_INPUT,
@@ -97,14 +103,19 @@ export async function createAccountMeta<
                 node: remainingNode.value,
             });
         }
-        const addresses = argumentsInput?.[remainingNode.value.name];
+        // ioxde fork: honour the reference's `path` (`data.signers`). An unresolved path is
+        // indistinguishable from an absent argument, so the required/optional branch below governs both.
+        const argumentPath = remainingNode.value.path ?? [];
+        const rootValue = argumentsInput?.[remainingNode.value.name];
+        const addresses = argumentPath.length ? tryResolveArgumentPathValue(rootValue, argumentPath) : rootValue;
+        const reference = `${remainingNode.value.name}${formatArgumentPathSuffix(argumentPath)}`;
 
         if (addresses === undefined) {
             // Required remaining accounts must be provided.
             if (!remainingNode.isOptional) {
                 throw new CodamaError(CODAMA_ERROR__DYNAMIC_CLIENT__ARGUMENT_MISSING, {
                     argumentName: remainingNode.value.name,
-                    argumentPath: '',
+                    argumentPath: formatArgumentPathSuffix(argumentPath),
                     instructionName: ixNode.name,
                 });
             }
@@ -115,6 +126,7 @@ export async function createAccountMeta<
         if (!Array.isArray(addresses)) {
             throw new CodamaError(CODAMA_ERROR__DYNAMIC_CLIENT__INVALID_ARGUMENT_INPUT, {
                 argumentName: remainingNode.value.name,
+                argumentPath: formatArgumentPathSuffix(argumentPath),
                 expectedType: 'Address[]',
                 value: safeStringify(addresses),
             });
@@ -124,7 +136,7 @@ export async function createAccountMeta<
             const addr: unknown = addresses[i];
             if (!isAddressConvertible(addr)) {
                 throw new CodamaError(CODAMA_ERROR__DYNAMIC_CLIENT__UNEXPECTED_ADDRESS_TYPE, {
-                    accountName: `${remainingNode.value.name}[${i}]`,
+                    accountName: `${reference}[${i}]`,
                     actualType: formatValueType(addr),
                     expectedType: 'Address | PublicKey',
                 });

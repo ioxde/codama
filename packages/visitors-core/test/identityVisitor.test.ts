@@ -1,10 +1,16 @@
 import {
     accountValueNode,
     assertIsNode,
+    enumEmptyVariantTypeNode,
+    enumStructVariantTypeNode,
+    enumTupleVariantTypeNode,
+    enumVariantDisplayNode,
     numberTypeNode,
     pdaLinkNode,
     pdaValueNode,
     publicKeyTypeNode,
+    structFieldTypeNode,
+    structTypeNode,
     tupleTypeNode,
 } from '@codama/nodes';
 import { expect, test } from 'vitest';
@@ -40,6 +46,48 @@ test('it cascades null up when a programId child visit returns null', () => {
     const visitor = identityVisitor();
     visitor.visitAccountValue = () => null;
     expect(visit(node, visitor)).toBeNull();
+});
+
+test('it preserves discriminator and display on an enum struct variant that keeps its payload', () => {
+    const node = enumStructVariantTypeNode(
+        'cancel',
+        structTypeNode([structFieldTypeNode({ name: 'x', type: numberTypeNode('u8') })]),
+        7,
+        { display: enumVariantDisplayNode({ label: 'Cancel order' }) },
+    );
+    const result = visit(node, identityVisitor());
+    expect(result).toEqual(node);
+});
+
+test('it preserves discriminator and display when downgrading a struct variant to an empty variant', () => {
+    // Given a struct variant whose only field visits away, forcing the downgrade.
+    const node = enumStructVariantTypeNode(
+        'cancel',
+        structTypeNode([structFieldTypeNode({ name: 'x', type: publicKeyTypeNode() })]),
+        7,
+        { display: enumVariantDisplayNode({ label: 'Cancel order' }) },
+    );
+    const visitor = identityVisitor();
+    visitor.visitPublicKeyType = () => null;
+
+    const result = visit(node, visitor);
+    expect(result).toEqual(
+        enumEmptyVariantTypeNode('cancel', 7, { display: enumVariantDisplayNode({ label: 'Cancel order' }) }),
+    );
+});
+
+test('it preserves discriminator and display when downgrading a tuple variant to an empty variant', () => {
+    // Given a tuple variant whose only item visits away, forcing the downgrade.
+    const node = enumTupleVariantTypeNode('cancel', tupleTypeNode([publicKeyTypeNode()]), 3, {
+        display: enumVariantDisplayNode({ label: 'Cancel order' }),
+    });
+    const visitor = identityVisitor();
+    visitor.visitPublicKeyType = () => null;
+
+    const result = visit(node, visitor);
+    expect(result).toEqual(
+        enumEmptyVariantTypeNode('cancel', 3, { display: enumVariantDisplayNode({ label: 'Cancel order' }) }),
+    );
 });
 
 test('it can remove nodes by returning null', () => {

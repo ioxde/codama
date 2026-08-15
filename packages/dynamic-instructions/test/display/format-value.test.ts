@@ -125,6 +125,29 @@ describe('formatAmountValue', () => {
         // Then we expect null so the caller falls back to the raw value.
         expect(result).toBeNull();
     });
+
+    test('it returns null for absurd decimals rather than throwing', async () => {
+        // Given decimals of 2^64.
+        const node = amountNumberDisplayNode({ decimals: numberValueNode(2 ** 64) });
+
+        const result = await formatAmountValue(42n, node, context());
+        expect(result).toBeNull();
+    });
+
+    test('it returns null for decimals beyond any real asset scale', async () => {
+        const node = amountNumberDisplayNode({ decimals: numberValueNode(255) });
+
+        const result = await formatAmountValue(42n, node, context());
+        expect(result).toBeNull();
+    });
+
+    test('it still scales at the maximum supported decimals', async () => {
+        // Given 30 decimals, the largest presentable scale.
+        const node = amountNumberDisplayNode({ decimals: numberValueNode(30) });
+
+        const result = await formatAmountValue(10n ** 30n, node, context());
+        expect(result).toBe('1');
+    });
 });
 
 describe('formatDateTimeValue', () => {
@@ -196,5 +219,15 @@ describe('formatStringValue', () => {
 
         // Then we expect the sliced substring.
         expect(result).toBe('SOL');
+    });
+
+    test('it slices by code points without splitting surrogate pairs', () => {
+        // Given astral-plane characters, each two UTF-16 code units wide.
+        const node = stringDisplayNode({ sliceEnd: 2, sliceStart: 0 });
+
+        const result = formatStringValue('😀😁😂', node);
+
+        // Then we expect the first two whole characters, not a lone surrogate at the boundary.
+        expect(result).toBe('😀😁');
     });
 });

@@ -35,6 +35,56 @@ test('it encodes scalar enums with custom sizes', () => {
     expect(codec.decode(hex('0100'))).toBe(1);
 });
 
+test('it encodes scalar enums with explicit discriminators', () => {
+    const codec = getNodeCodec([
+        enumTypeNode([enumEmptyVariantTypeNode('cancel', 1), enumEmptyVariantTypeNode('confirm', 0)]),
+    ]);
+    expect(codec.encode('confirm')).toStrictEqual(hex('00'));
+    expect(codec.decode(hex('00'))).toBe(0);
+    expect(codec.encode('cancel')).toStrictEqual(hex('01'));
+    expect(codec.decode(hex('01'))).toBe(1);
+});
+
+test('it encodes data enums with explicit discriminators', () => {
+    const codec = getNodeCodec([
+        enumTypeNode([
+            enumStructVariantTypeNode(
+                'cancel',
+                structTypeNode([structFieldTypeNode({ name: 'x', type: numberTypeNode('u8') })]),
+                1,
+            ),
+            enumEmptyVariantTypeNode('confirm', 0),
+        ]),
+    ]);
+    const confirmVariant = { __kind: 'Confirm' };
+    expect(codec.encode(confirmVariant)).toStrictEqual(hex('00'));
+    expect(codec.decode(hex('00'))).toStrictEqual(confirmVariant);
+    const cancelVariant = { __kind: 'Cancel', x: 5 };
+    expect(codec.encode(cancelVariant)).toStrictEqual(hex('0105'));
+    expect(codec.decode(hex('0105'))).toStrictEqual(cancelVariant);
+});
+
+test('it rejects unknown wire discriminators when decoding a scalar enum', () => {
+    const codec = getNodeCodec([
+        enumTypeNode([enumEmptyVariantTypeNode('cancel', 1), enumEmptyVariantTypeNode('confirm', 0)]),
+    ]);
+    expect(() => codec.decode(hex('02'))).toThrow();
+});
+
+test('it rejects unknown wire discriminators when decoding a data enum', () => {
+    const codec = getNodeCodec([
+        enumTypeNode([
+            enumStructVariantTypeNode(
+                'cancel',
+                structTypeNode([structFieldTypeNode({ name: 'x', type: numberTypeNode('u8') })]),
+                1,
+            ),
+            enumEmptyVariantTypeNode('confirm', 0),
+        ]),
+    ]);
+    expect(() => codec.decode(hex('0205'))).toThrow();
+});
+
 test('it encodes data enums', () => {
     const codec = getNodeCodec([
         enumTypeNode([

@@ -1,20 +1,22 @@
 import { getLastNodeFromPath, type InjectedValueNode, isNode, type Node, type NodePath, type TypeNode } from 'codama';
 
-import { resolveDisplayType } from './resolve-display-type';
+import { collectNestedDataPlaceholders } from './interpolate-intent';
+import { resolveDisplayType, resolveDisplayTypePath } from './resolve-display-type';
 import type { DisplayContext } from './types';
 
 type BaseDisplayContext = Omit<DisplayContext, 'consumedMemberNames'>;
 
 /**
- * Collects the `injectedValueNode`s requested by the instruction's argument displays, mirroring
- * what the fallback list renders (see `list-fallback.ts`). A purely static walk shared by the
- * consumed-member computation and the offline-dictionary planner so they agree on which injections
- * exist. Nodes are returned (rather than bare keys) so callers can reach each injection's `fallback`.
+ * Mirrors everything an instruction actually surfaces: `list-fallback.ts`'s flatten-aware walk plus the leaves the
+ * intent template dots into (`interpolate-intent.ts`). If either drifts, the consumed-member gate and the offline
+ * dictionary disagree with what the user sees. Duplicates are not pruned; both callers deduplicate.
  */
 export function collectInjectedNodes(displayContext: BaseDisplayContext): InjectedValueNode[] {
     const instructionPath = displayContext.parsedInstruction.path;
     const instruction = getLastNodeFromPath(instructionPath);
-    return (instruction.arguments ?? []).flatMap(argument =>
+    const instructionArguments = instruction.arguments ?? [];
+
+    const fromArguments = instructionArguments.flatMap(argument =>
         collectMemberInjectedNodes(
             argument.type,
             argument.display?.flatten ?? false,
@@ -22,6 +24,22 @@ export function collectInjectedNodes(displayContext: BaseDisplayContext): Inject
             displayContext,
         ),
     );
+
+    const fromTemplate = collectNestedDataPlaceholders(instruction.display?.interpolatedIntent).flatMap(
+        ({ name, segments }) => {
+            const argument = instructionArguments.find(arg => arg.name === name);
+            if (!argument) return [];
+            const leaf = resolveDisplayTypePath(
+                argument.type,
+                [...instructionPath, argument],
+                segments,
+                displayContext,
+            );
+            return leaf ? collectMemberInjectedNodes(leaf.type, false, leaf.ownerPath, displayContext) : [];
+        },
+    );
+
+    return [...fromArguments, ...fromTemplate];
 }
 
 // Amount displays carry the injectable inputs; a flattened struct surfaces its direct fields, so we

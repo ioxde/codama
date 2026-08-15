@@ -1,6 +1,7 @@
 import type { ArgumentsInput } from '@codama/dynamic-address-resolution';
 import { CODAMA_ERROR__DYNAMIC_CLIENT__FAILED_TO_VALIDATE_INPUT, CodamaError } from '@codama/errors';
 import type { InstructionNode, RootNode } from 'codama';
+import { isNode } from 'codama';
 import type { Failure } from 'superstruct';
 import { assert, StructError } from 'superstruct';
 
@@ -99,15 +100,18 @@ function validateOmittedArguments(ixNode: InstructionNode, argumentsInput: Argum
 }
 
 function getRemainingAccountArgNames(ixNode: InstructionNode): string[] {
-    return (ixNode.remainingAccounts ?? [])
-        .filter(node => node.value.kind === 'argumentValueNode')
-        .map(node => node.value.name);
+    // Stripping a declared root makes the validator reject it as missing and skip that struct's
+    // checks. A path is not the test: it can root in a declared struct argument (`data.signers`)
+    // or in a purely virtual object (`groups.signers`).
+    const declaredNames = new Set([...(ixNode.arguments ?? []), ...(ixNode.extraArguments ?? [])].map(arg => arg.name));
+    return (ixNode.remainingAccounts ?? []).flatMap(node => {
+        if (!isNode(node.value, 'argumentValueNode')) return [];
+        if (declaredNames.has(node.value.name)) return [];
+        return [node.value.name];
+    });
 }
 
-/**
- * Filters out remaining account argument names from the arguments input.
- * So superstruct's object() doesn't reject them as extra keys.
- */
+/** Drops virtual remaining account argument names so superstruct's object() doesn't reject them as extra keys. */
 function filterRemainingAccountArguments(ixNode: InstructionNode, argumentsInput: ArgumentsInput): ArgumentsInput {
     const remainingAccountArgNames = getRemainingAccountArgNames(ixNode);
     if (!remainingAccountArgNames.length) {

@@ -1,9 +1,11 @@
 import type { Address } from '@solana/addresses';
+import { AccountRole } from '@solana/instructions';
 import {
     accountFieldValueNode,
     accountNode,
     accountValueNode,
     argumentValueNode,
+    type CamelCaseString,
     injectedValueNode,
     numberTypeNode,
     numberValueNode,
@@ -128,6 +130,134 @@ describe('resolveInjectedValue', () => {
         expect(result).toBe(6);
     });
 
+    test('it resolves an argument value node through a nested path', async () => {
+        const node = argumentValueNode('planData', ['decimals']);
+
+        const result = await resolveInjectedValue(
+            node,
+            context({ parsedInstruction: parsedInstruction({ data: { planData: { decimals: 6 } } }) }),
+        );
+        expect(result).toBe(6);
+    });
+
+    test('it resolves an argument value node through a multi-segment path', async () => {
+        const node = argumentValueNode('planData', ['terms', 'amount']);
+
+        const result = await resolveInjectedValue(
+            node,
+            context({
+                parsedInstruction: parsedInstruction({ data: { planData: { terms: { amount: 1_500_000n } } } }),
+            }),
+        );
+        expect(result).toBe(1_500_000n);
+    });
+
+    test('it resolves an argument value node through a numeric index', async () => {
+        const node = argumentValueNode('planData', ['decimalsPerTier', '1']);
+
+        const result = await resolveInjectedValue(
+            node,
+            context({ parsedInstruction: parsedInstruction({ data: { planData: { decimalsPerTier: [6, 9] } } }) }),
+        );
+        expect(result).toBe(9);
+    });
+
+    test('it returns null when a numeric index is out of bounds', async () => {
+        const node = argumentValueNode('planData', ['decimalsPerTier', '5']);
+
+        const result = await resolveInjectedValue(
+            node,
+            context({ parsedInstruction: parsedInstruction({ data: { planData: { decimalsPerTier: [6, 9] } } }) }),
+        );
+        expect(result).toBeNull();
+    });
+
+    test('it returns null when a path segment names a field that does not exist', async () => {
+        const node = argumentValueNode('planData', ['missing']);
+
+        const result = await resolveInjectedValue(
+            node,
+            context({ parsedInstruction: parsedInstruction({ data: { planData: { decimals: 6 } } }) }),
+        );
+        expect(result).toBeNull();
+    });
+
+    test('it returns null when a path descends through a primitive', async () => {
+        const node = argumentValueNode('planData', ['decimals', 'deeper']);
+
+        const result = await resolveInjectedValue(
+            node,
+            context({ parsedInstruction: parsedInstruction({ data: { planData: { decimals: 6 } } }) }),
+        );
+        expect(result).toBeNull();
+    });
+
+    test('it returns null when a path resolves to a leaf that is not a primitive', async () => {
+        const node = argumentValueNode('planData', ['terms']);
+
+        const result = await resolveInjectedValue(
+            node,
+            context({ parsedInstruction: parsedInstruction({ data: { planData: { terms: { amount: 1n } } } }) }),
+        );
+        expect(result).toBeNull();
+    });
+
+    test('it returns null for a path-bearing argument value node when the argument is absent', async () => {
+        const node = argumentValueNode('planData', ['decimals']);
+
+        const result = await resolveInjectedValue(
+            node,
+            context({ parsedInstruction: parsedInstruction({ data: {} }) }),
+        );
+        expect(result).toBeNull();
+    });
+
+    test('it resolves an injected value provided by a path-bearing argument value node', async () => {
+        const node = injectedValueNode({ key: 'decimals' });
+        const provides = providesMap(providedNode('decimals', argumentValueNode('planData', ['decimals'])));
+
+        const result = await resolveInjectedValue(
+            node,
+            context({ parsedInstruction: parsedInstruction({ data: { planData: { decimals: 6 } } }), provides }),
+        );
+        expect(result).toBe(6);
+    });
+
+    test('it resolves an argument value node through an option-wrapped struct', async () => {
+        // Given a path into a struct argument Kit decodes as `{ __option: 'Some', value: {...} }`.
+        const node = argumentValueNode('planData', ['decimals']);
+
+        const result = await resolveInjectedValue(
+            node,
+            context({
+                parsedInstruction: parsedInstruction({
+                    data: { planData: { __option: 'Some', value: { decimals: 6 } } },
+                }),
+            }),
+        );
+        expect(result).toBe(6);
+    });
+
+    test('it returns null when a path descends through a None', async () => {
+        const node = argumentValueNode('planData', ['decimals']);
+
+        const result = await resolveInjectedValue(
+            node,
+            context({ parsedInstruction: parsedInstruction({ data: { planData: { __option: 'None' } } }) }),
+        );
+        expect(result).toBeNull();
+    });
+
+    test('it returns null for a path-less argument value node whose argument is a struct', async () => {
+        const node = argumentValueNode('planData');
+
+        const result = await resolveInjectedValue(
+            node,
+            context({ parsedInstruction: parsedInstruction({ data: { planData: { decimals: 6 } } }) }),
+        );
+        expect(result).toBeNull();
+    });
+
     test('it resolves an account value node to the account address', async () => {
         // Given an account value node and a known account address.
         const node = accountValueNode('mint');
@@ -139,6 +269,25 @@ describe('resolveInjectedValue', () => {
         );
 
         // Then we expect the address.
+        expect(result).toBe(MINT);
+    });
+
+    test('it resolves an account value node whose parsed account name is not normalised', async () => {
+        // Given a parsed instruction carrying a `Mint`-cased account name.
+        const node = accountValueNode('mint');
+        const base = parsedInstruction({});
+
+        const result = await resolveInjectedValue(
+            node,
+            context({
+                parsedInstruction: {
+                    ...base,
+                    accounts: [{ address: MINT, name: 'Mint' as CamelCaseString, role: AccountRole.READONLY }],
+                },
+            }),
+        );
+
+        // Then the lookup matches through camelCase.
         expect(result).toBe(MINT);
     });
 

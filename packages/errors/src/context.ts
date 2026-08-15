@@ -188,6 +188,9 @@ export type CodamaErrorContext = DefaultUnspecifiedErrorContextToUndefined<{
     };
     [CODAMA_ERROR__DYNAMIC_CLIENT__INVALID_ARGUMENT_INPUT]: {
         argumentName: CamelCaseString;
+        // Dotted suffix (".signers") or "", kept out of `argumentName` which is a `CamelCaseString`.
+        // Required, not optional: the message template always interpolates `$argumentPath`.
+        argumentPath: string;
         expectedType: string;
         value: string;
     };

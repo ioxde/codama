@@ -53,7 +53,8 @@ export function getValueNodeVisitor(
                 });
             }
             const variant = variants[variantIndex];
-            if (isScalarEnum(enumType)) return variantIndex;
+            // `visitEnumType` builds this codec with `useValuesAsDiscriminators`; an index names the wrong variant.
+            if (isScalarEnum(enumType)) return variant.discriminator ?? variantIndex;
             const kind = { __kind: pascalCase(node.variant) };
             if (isNode(variant, 'enumEmptyVariantTypeNode')) return kind;
             if (isNode(variant, 'enumStructVariantTypeNode') && !!node.value) {

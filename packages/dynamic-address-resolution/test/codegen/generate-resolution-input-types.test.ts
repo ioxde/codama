@@ -1,9 +1,18 @@
 import {
+    argumentValueNode,
+    arrayTypeNode,
+    bytesTypeNode,
     camelCase,
+    fixedSizeTypeNode,
     instructionAccountNode,
     instructionArgumentNode,
     instructionNode,
     instructionRemainingAccountsNode,
+    numberTypeNode,
+    publicKeyTypeNode,
+    remainderCountNode,
+    structFieldTypeNode,
+    structTypeNode,
 } from 'codama';
 import { describe, expect, test } from 'vitest';
 
@@ -170,6 +179,192 @@ describe('generateResolutionInputTypes', () => {
         const output = generateResolutionInputTypes(root);
         expect(output).toContain('export type MultiSigArgs');
         expect(output).toContain('multiSigners: Address[];');
+    });
+
+    test('should not re-emit the root argument of a path-bearing remaining account reference', () => {
+        // The arguments loop already emitted the root; emitting it again duplicates the key.
+        const root = makeRoot([
+            instructionNode({
+                arguments: [
+                    instructionArgumentNode({
+                        name: 'data',
+                        type: structTypeNode([
+                            structFieldTypeNode({
+                                name: 'multiSigners',
+                                type: arrayTypeNode(publicKeyTypeNode(), remainderCountNode()),
+                            }),
+                        ]),
+                    }),
+                ],
+                name: 'nestedMultiSig',
+                remainingAccounts: [
+                    instructionRemainingAccountsNode(argumentValueNode('data', ['multiSigners']), {
+                        isSigner: true,
+                        isWritable: false,
+                    }),
+                ],
+            }),
+        ]);
+        const output = generateResolutionInputTypes(root);
+        expect(output).toContain('data: { multiSigners: Address[] };');
+        expect(output.match(/^\s*data\??:/gm)).toHaveLength(1);
+    });
+
+    test('should emit extraArguments as optional keys in the Args type', () => {
+        const root = makeRoot([
+            instructionNode({
+                arguments: [instructionArgumentNode({ name: 'amountIn', type: numberTypeNode('u64') })],
+                extraArguments: [
+                    instructionArgumentNode({
+                        name: 'creatorHash',
+                        type: fixedSizeTypeNode(bytesTypeNode(), 32),
+                    }),
+                ],
+                name: 'buyExactIn',
+            }),
+        ]);
+        const output = generateResolutionInputTypes(root);
+        expect(output).toContain('amountIn: number | bigint;');
+        expect(output).toContain('creatorHash?: Uint8Array;');
+    });
+
+    test('should emit an Args type for an instruction whose only inputs are extraArguments', () => {
+        const root = makeRoot([
+            instructionNode({
+                extraArguments: [instructionArgumentNode({ name: 'creatorHash', type: publicKeyTypeNode() })],
+                name: 'collectFee',
+            }),
+        ]);
+        const output = generateResolutionInputTypes(root);
+        expect(output).toContain('export type CollectFeeArgs');
+        expect(output).toContain('creatorHash?: Address;');
+    });
+
+    test('should not emit a duplicate key when a path-less remaining account reference names a declared argument', () => {
+        const root = makeRoot([
+            instructionNode({
+                arguments: [
+                    instructionArgumentNode({
+                        name: 'multiSigners',
+                        type: arrayTypeNode(publicKeyTypeNode(), remainderCountNode()),
+                    }),
+                ],
+                name: 'declaredMultiSig',
+                remainingAccounts: [
+                    instructionRemainingAccountsNode(argumentValueNode('multiSigners'), {
+                        isSigner: true,
+                        isWritable: false,
+                    }),
+                ],
+            }),
+        ]);
+        const output = generateResolutionInputTypes(root);
+        expect(output.match(/^\s*multiSigners\??:/gm)).toHaveLength(1);
+    });
+
+    test('should synthesize an object type for a path-bearing reference to an undeclared root', () => {
+        const root = makeRoot([
+            instructionNode({
+                arguments: [instructionArgumentNode({ name: 'amount', type: numberTypeNode('u64') })],
+                name: 'virtualNested',
+                remainingAccounts: [
+                    instructionRemainingAccountsNode(argumentValueNode('groups', ['signers']), { isSigner: true }),
+                ],
+            }),
+        ]);
+        const output = generateResolutionInputTypes(root);
+        expect(output).toContain('groups: { signers: Address[] };');
+    });
+
+    test('should mark a virtual path-bearing root optional when every group reading it is optional', () => {
+        const root = makeRoot([
+            instructionNode({
+                arguments: [instructionArgumentNode({ name: 'amount', type: numberTypeNode('u64') })],
+                name: 'virtualNestedOptional',
+                remainingAccounts: [
+                    instructionRemainingAccountsNode(argumentValueNode('groups', ['signers']), {
+                        isOptional: true,
+                        isSigner: true,
+                    }),
+                ],
+            }),
+        ]);
+        const output = generateResolutionInputTypes(root);
+        expect(output).toContain('groups?: { signers?: Address[] };');
+    });
+
+    test('should merge every path-bearing group sharing a virtual root into one key', () => {
+        const root = makeRoot([
+            instructionNode({
+                arguments: [instructionArgumentNode({ name: 'amount', type: numberTypeNode('u64') })],
+                name: 'virtualMerged',
+                remainingAccounts: [
+                    instructionRemainingAccountsNode(argumentValueNode('groups', ['signers']), { isSigner: true }),
+                    instructionRemainingAccountsNode(argumentValueNode('groups', ['delegates']), {
+                        isOptional: true,
+                        isSigner: false,
+                    }),
+                ],
+            }),
+        ]);
+        const output = generateResolutionInputTypes(root);
+        expect(output).toContain('groups: { signers: Address[]; delegates?: Address[] };');
+        expect(output.match(/^\s*groups\??:/gm)).toHaveLength(1);
+    });
+
+    test('should intersect Address[] with the nested shape when one group path prefixes another', () => {
+        // The runtime resolves each path independently, so the type must keep both contracts.
+        const root = makeRoot([
+            instructionNode({
+                arguments: [instructionArgumentNode({ name: 'amount', type: numberTypeNode('u64') })],
+                name: 'virtualPrefixed',
+                remainingAccounts: [
+                    instructionRemainingAccountsNode(argumentValueNode('groups', ['signers']), { isSigner: true }),
+                    instructionRemainingAccountsNode(argumentValueNode('groups', ['signers', 'backup']), {
+                        isOptional: true,
+                        isSigner: true,
+                    }),
+                ],
+            }),
+        ]);
+        const output = generateResolutionInputTypes(root);
+        expect(output).toContain('groups: { signers: Address[] & { backup?: Address[] } };');
+    });
+
+    test('should intersect regardless of the order the prefixed groups are declared in', () => {
+        const root = makeRoot([
+            instructionNode({
+                arguments: [instructionArgumentNode({ name: 'amount', type: numberTypeNode('u64') })],
+                name: 'virtualPrefixedReversed',
+                remainingAccounts: [
+                    instructionRemainingAccountsNode(argumentValueNode('groups', ['signers', 'backup']), {
+                        isOptional: true,
+                        isSigner: true,
+                    }),
+                    instructionRemainingAccountsNode(argumentValueNode('groups', ['signers']), { isSigner: true }),
+                ],
+            }),
+        ]);
+        const output = generateResolutionInputTypes(root);
+        expect(output).toContain('groups: { signers: Address[] & { backup?: Address[] } };');
+    });
+
+    test('should intersect Address[] with the nested shape when a path-less group shares the root', () => {
+        const root = makeRoot([
+            instructionNode({
+                arguments: [instructionArgumentNode({ name: 'amount', type: numberTypeNode('u64') })],
+                name: 'virtualMixedDepth',
+                remainingAccounts: [
+                    instructionRemainingAccountsNode(argumentValueNode('groups'), { isSigner: true }),
+                    instructionRemainingAccountsNode(argumentValueNode('groups', ['delegates']), {
+                        isOptional: true,
+                        isSigner: false,
+                    }),
+                ],
+            }),
+        ]);
+        const output = generateResolutionInputTypes(root);
+        expect(output).toContain('groups: Address[] & { delegates?: Address[] };');
     });
 
     test('should emit empty Accounts fallback for instructions without accounts', () => {

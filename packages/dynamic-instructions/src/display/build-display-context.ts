@@ -71,8 +71,8 @@ export function buildBaseDisplayContext(
  *
  * Follows the instruction account's `accountLink` to the linked `AccountNode` — resolved through
  * the shared `LinkableDictionary`, so cross-program links resolve too — then decodes the bytes with
- * that account's codec. Returns `null` when the account is unknown, carries no `accountLink`, or the
- * link cannot be resolved.
+ * that account's codec. Returns `null` when the account is unknown, carries no `accountLink`, the
+ * link cannot be resolved, or the bytes do not decode against the linked layout.
  *
  * The link is resolved from a path rooted at the instruction (`[...parsedInstruction.path, link]`)
  * so the dictionary can supply the program context for links that omit an explicit program.
@@ -91,6 +91,12 @@ function createAccountDataResolver(
         const accountPath = linkables.getPath(linkPath);
         if (!accountPath) return null;
 
-        return getNodeCodec(accountPath).decode(bytes) as Record<string, unknown>;
+        try {
+            return getNodeCodec(accountPath).decode(bytes) as Record<string, unknown>;
+        } catch {
+            // Bytes that do not decode against the linked layout degrade that one field — injected
+            // value `null`, member still visible — rather than killing the whole display.
+            return null;
+        }
     };
 }

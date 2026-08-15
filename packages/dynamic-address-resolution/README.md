@@ -178,6 +178,22 @@ if (isAddressConvertible(input)) {
 }
 ```
 
+#### `tryResolveArgumentPathValue(rootValue, path)`
+
+Walks an `ArgumentValueNode` path through a runtime value and returns the leaf, or `undefined` — never throws — if the path does not fully resolve. `Some` option wrappers are unwrapped along the way; a `None` reads as absent.
+
+```ts
+tryResolveArgumentPathValue({ tiers: [6, 9] }, ['tiers', '1'] as CamelCaseString[]); // 9
+```
+
+#### `formatArgumentPathSuffix(path)`
+
+Formats a path array as the dotted suffix used in error messages — e.g. `.signers` — or `""` for an empty path.
+
+```ts
+formatArgumentPathSuffix(['data', 'signers'] as CamelCaseString[]); // '.data.signers'
+```
+
 #### Constants
 
 - `OPTIONAL_NODE_KINDS` — type-node kinds treated as optional.

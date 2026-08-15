@@ -25,7 +25,7 @@ import {
     transformDecoder,
     transformEncoder,
 } from '@solana/codecs';
-import { isNode, type RootNode } from 'codama';
+import { camelCase, isNode, type RootNode } from 'codama';
 
 import { buildBaseDisplayContext } from './build-display-context';
 import { collectInjectedNodes } from './collect-injected-nodes';
@@ -81,7 +81,10 @@ export function getRequiredAccountsForDisplay(root: RootNode, parsedInstruction:
         return target && isNode(target, 'accountFieldValueNode') ? [target.account] : [];
     });
     const addresses = accountNames.flatMap(name => {
-        const address = parsedInstruction.accounts.find(account => account.name === name)?.address;
+        // Compare through camelCase: parsed instructions built from bare JSON carry un-normalised
+        // account names, and a missed match silently under-fetches the offline dictionary.
+        const target = camelCase(name);
+        const address = parsedInstruction.accounts.find(account => camelCase(account.name) === target)?.address;
         return address ? [address] : [];
     });
     return [...new Set(addresses)];

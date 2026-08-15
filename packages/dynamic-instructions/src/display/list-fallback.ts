@@ -1,5 +1,6 @@
 import { AccountRole } from '@solana/instructions';
 import {
+    camelCase,
     type DisplaySkip,
     getLastNodeFromPath,
     type InstructionArgumentNode,
@@ -11,6 +12,7 @@ import {
 } from 'codama';
 
 import { isObjectRecord } from '../shared/util';
+import { argumentReferenceName, qualifiedMemberName } from './argument-reference';
 import { formatArgumentValue } from './format-argument-value';
 import { unwrapOptionValue } from './option-value';
 import { resolveDisplayType } from './resolve-display-type';
@@ -57,6 +59,7 @@ async function argumentFields(
             resolved.type,
             resolved.ownerPath,
             unwrapped.value,
+            argument.name,
             argument.display.flattenPrefix,
             displayContext,
         );
@@ -71,11 +74,14 @@ async function flattenedFields(
     struct: StructTypeNode,
     structPath: NodePath,
     value: Record<string, unknown>,
+    owner: string,
     prefix: string | undefined,
     displayContext: DisplayContext,
 ): Promise<DisplayField[]> {
+    // ioxde fork: skip lookups use the qualified `owner.field` name. The bare field name would miss
+    // path-bearing references and collide with a same-named member of another argument.
     const visibleFields = (struct.fields ?? []).filter(
-        field => !isSkipped(field.display?.skip, field.name, displayContext),
+        field => !isSkipped(field.display?.skip, qualifiedMemberName(owner, field.name), displayContext),
     );
     const fieldGroups = await Promise.all(
         visibleFields.map(async field => {
@@ -126,7 +132,10 @@ function accountFields(displayContext: DisplayContext): DisplayField[] {
     const instruction = getLastNodeFromPath(displayContext.parsedInstruction.path);
     return (instruction.accounts ?? []).flatMap(account => {
         if (isSkipped(account.display?.skip, account.name, displayContext)) return [];
-        const address = displayContext.parsedInstruction.accounts.find(a => a.name === account.name)?.address;
+        // Parsed instructions built from bare JSON carry un-normalised account names; a miss here silently drops a signing-screen row.
+        const address = displayContext.parsedInstruction.accounts.find(
+            a => camelCase(a.name) === account.name,
+        )?.address;
         if (!address) return [];
         const label = account.display?.label ?? titleCase(account.name);
         return [{ label, value: address }];
@@ -134,37 +143,47 @@ function accountFields(displayContext: DisplayContext): DisplayField[] {
 }
 
 /**
- * Produces the display fields for the instruction's remaining accounts.
- *
- * The instruction node describes remaining accounts as ordered groups
- * (`instructionRemainingAccountsNode`); the parsed instruction carries the concrete trailing
- * metas unsplit. Each non-final group consumes the run of metas whose signer role matches its
- * `isSigner` flag; the final group takes everything left. Each group honours its display
- * metadata (`label` override, `skip`) and numbers its entries when it holds more than one.
+ * Every group, the final one included, takes only the run of metas matching its `isSigner` flag;
+ * metas no group claims render generically, since a confidently wrong label is worse than a
+ * generic one on a signing screen.
  */
 function remainingAccountFields(displayContext: DisplayContext): DisplayField[] {
     const instruction = getLastNodeFromPath(displayContext.parsedInstruction.path);
     const groups = instruction.remainingAccounts ?? [];
     const metas = displayContext.parsedInstruction.remainingAccounts ?? [];
-    if (groups.length === 0 || metas.length === 0) return [];
+    if (metas.length === 0) return [];
+    // Parsers populate the trailing metas whether or not the instruction declares groups, and most
+    // IDLs declare none — accounts the user is about to sign over must not vanish from the list.
+    if (groups.length === 0) return unlabelledRemainingAccountFields(metas.map(meta => meta.address));
 
     let cursor = 0;
-    return groups.flatMap((group, groupIndex) => {
+    const groupFields = groups.flatMap(group => {
         const taken: string[] = [];
-        const isLastGroup = groupIndex === groups.length - 1;
-        while (cursor < metas.length && (isLastGroup || signerMatches(group.isSigner, metas[cursor].role))) {
+        while (cursor < metas.length && signerMatches(group.isSigner, metas[cursor].role)) {
             taken.push(metas[cursor].address);
             cursor += 1;
         }
 
-        const name = isNode(group.value, 'argumentValueNode') ? group.value.name : undefined;
-        if (isSkipped(group.display?.skip, name ?? '', displayContext)) return [];
+        // ioxde fork: a path-bearing group value displays its leaf segment, but the dotted
+        // reference is its skip-lookup identity.
+        const value = isNode(group.value, 'argumentValueNode') ? group.value : undefined;
+        const path = value?.path ?? [];
+        const name = value ? (path.length > 0 ? path[path.length - 1] : value.name) : undefined;
+        if (isSkipped(group.display?.skip, value ? argumentReferenceName(value) : '', displayContext)) return [];
         const label = group.display?.label ?? (name ? titleCase(name) : 'Remaining Accounts');
         return taken.map((address, index) => ({
             label: taken.length > 1 ? `${label} #${index + 1}` : label,
             value: address,
         }));
     });
+    return [...groupFields, ...unlabelledRemainingAccountFields(metas.slice(cursor).map(meta => meta.address))];
+}
+
+function unlabelledRemainingAccountFields(addresses: readonly string[]): DisplayField[] {
+    return addresses.map((address, index) => ({
+        label: addresses.length > 1 ? `Remaining Accounts #${index + 1}` : 'Remaining Accounts',
+        value: address,
+    }));
 }
 
 /** Whether an account meta's role satisfies a remaining-accounts group's `isSigner` flag. */
@@ -178,9 +197,25 @@ function signerMatches(isSigner: boolean | 'either' | undefined, role: AccountRo
  * Determines whether a member is hidden from the fallback list given its `skip` strategy.
  * `'always'` always hides; `'whenInjected'` hides when the member's value was surfaced elsewhere
  * through the provide/inject graph (see `consumedMemberNames`); `'never'`/absent shows.
+ *
+ * `name` must be the member's qualified name, matching what `resolveConsumedMemberNames` records.
  */
 function isSkipped(skip: DisplaySkip | undefined, name: string, displayContext: DisplayContext): boolean {
     if (skip === 'always') return true;
-    if (skip === 'whenInjected') return displayContext.consumedMemberNames.has(name);
+    if (skip === 'whenInjected') return isConsumed(name, displayContext.consumedMemberNames);
+    return false;
+}
+
+/**
+ * Also matches consumed names nested below `name`, since the list renders only two levels and a
+ * deeper reference can only be hidden by the surface containing it. An unmarked container stays
+ * visible.
+ */
+function isConsumed(name: string, consumedMemberNames: ReadonlySet<string>): boolean {
+    if (consumedMemberNames.has(name)) return true;
+    const prefix = `${name}.`;
+    for (const consumed of consumedMemberNames) {
+        if (consumed.startsWith(prefix)) return true;
+    }
     return false;
 }

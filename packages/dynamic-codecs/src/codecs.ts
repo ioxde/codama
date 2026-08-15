@@ -41,7 +41,10 @@ import {
     addCodecSizePrefix,
     assertIsFixedSize,
     Codec,
+    combineCodec,
     createCodec,
+    Decoder,
+    Encoder,
     Endian,
     fixCodecSize,
     getArrayCodec,
@@ -78,6 +81,8 @@ import {
     padLeftCodec,
     padRightCodec,
     transformCodec,
+    transformDecoder,
+    transformEncoder,
 } from '@solana/codecs';
 
 import { getValueNodeVisitor } from './values';
@@ -186,23 +191,26 @@ export function getNodeCodecVisitor(
         },
         visitEnumType(node) {
             const size = visit(node.size, this) as NumberCodec;
-            // Scalar enums are decoded as simple numbers.
+            // A variant's wire value is `discriminator ?? position`; using the index puts the wrong variant on chain.
+            const variantNodes = node.variants ?? [];
+            const discriminators = variantNodes.map((variant, index) => variant.discriminator ?? index);
+            // Scalar enums decode to their wire discriminator, not their positional index.
             if (isScalarEnum(node)) {
                 return getEnumCodec(
                     Object.fromEntries(
-                        (node.variants ?? []).flatMap((variant, index) => [
-                            [variant.name, index],
-                            [index, variant.name],
+                        variantNodes.flatMap((variant, index) => [
+                            [variant.name, discriminators[index]],
+                            [discriminators[index], variant.name],
                         ]),
                     ),
-                    { size },
+                    { size, useValuesAsDiscriminators: true },
                 ) as Codec<unknown>;
             }
             // Data enums are decoded as discriminated unions, e.g. `{ __kind: 'Move', x: 10, y: 20 }`.
-            const variants = (node.variants ?? []).map(
-                variant => [pascalCase(variant.name), visit(variant, this)] as const,
-            );
-            return getDiscriminatedUnionCodec(variants, { size }) as unknown as Codec<unknown>;
+            const variants = variantNodes.map(variant => [pascalCase(variant.name), visit(variant, this)] as const);
+            return getDiscriminatedUnionCodec(variants, {
+                size: remapDiscriminatorCodec(size, discriminators),
+            }) as unknown as Codec<unknown>;
         },
         visitEvent(node) {
             return visit(node.data, this);
@@ -359,6 +367,21 @@ export function getNodeCodecVisitor(
 
     const visitor = pipe(baseVisitor, v => recordNodeStackVisitor(v, stack));
     return visitor;
+}
+
+// `getDiscriminatedUnionCodec` writes each variant's positional index through the `size` codec, so
+// this wraps it to translate index <-> wire discriminator. An unknown discriminator maps to `-1` so
+// the union codec rejects it; a `?? 0` fallback would decode as the first variant.
+function remapDiscriminatorCodec(size: NumberCodec, discriminators: number[]): NumberCodec {
+    if (discriminators.every((discriminator, index) => discriminator === index)) return size;
+    const indexByDiscriminator = new Map(discriminators.map((discriminator, index) => [discriminator, index]));
+    // Checked assignment widens both `NumberCodec` arms to `bigint | number`; don't swap in `as`.
+    const sizeEncoder: Encoder<bigint | number> = size;
+    const sizeDecoder: Decoder<bigint | number> = size;
+    return combineCodec(
+        transformEncoder(sizeEncoder, (index: bigint | number) => discriminators[Number(index)] ?? index),
+        transformDecoder(sizeDecoder, decoded => indexByDiscriminator.get(Number(decoded)) ?? -1),
+    );
 }
 
 function getCodecFromBytesEncoding(encoding: BytesEncoding) {

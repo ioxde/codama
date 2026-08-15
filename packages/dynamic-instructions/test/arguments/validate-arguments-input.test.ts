@@ -2,12 +2,17 @@ import { address } from '@solana/addresses';
 import type { InstructionNode } from 'codama';
 import {
     argumentValueNode,
+    arrayTypeNode,
     instructionArgumentNode,
     instructionNode,
     instructionRemainingAccountsNode,
     numberTypeNode,
     programNode,
+    publicKeyTypeNode,
+    remainderCountNode,
     rootNode,
+    structFieldTypeNode,
+    structTypeNode,
 } from 'codama';
 import { describe, expect, test } from 'vitest';
 
@@ -60,6 +65,75 @@ describe('Instruction validation: remaining account arguments', () => {
     test('should not reject optional remaining account args when provided', () => {
         const validate = createArgumentsInputValidator(transferRoot, transferIx);
         expect(() => validate({ amount: 100, multiSigners: [ADDR_1] })).not.toThrow();
+    });
+
+    // A path-bearing ref roots in a declared argument, not a virtual one, so the root stays in the validated input.
+    const nestedIx = instructionNode({
+        arguments: [
+            instructionArgumentNode({
+                name: 'data',
+                type: structTypeNode([
+                    structFieldTypeNode({ name: 'm', type: numberTypeNode('u8') }),
+                    structFieldTypeNode({
+                        name: 'signers',
+                        type: arrayTypeNode(publicKeyTypeNode(), remainderCountNode()),
+                    }),
+                ]),
+            }),
+        ],
+        name: 'initializeNestedMultisig',
+        remainingAccounts: [
+            instructionRemainingAccountsNode(argumentValueNode('data', ['signers']), {
+                isOptional: false,
+                isSigner: false,
+            }),
+        ],
+    });
+    const nestedRoot = makeRoot(nestedIx);
+
+    test('should accept a declared argument that a path-bearing remaining-accounts ref roots in', () => {
+        const validate = createArgumentsInputValidator(nestedRoot, nestedIx);
+        expect(() => validate({ data: { m: 2, signers: [ADDR_1, ADDR_2] } })).not.toThrow();
+    });
+
+    test('should still validate the struct a path-bearing remaining-accounts ref roots in', () => {
+        const validate = createArgumentsInputValidator(nestedRoot, nestedIx);
+        expect(() => validate({ data: { m: 'invalid', signers: [ADDR_1] } })).toThrow('Invalid argument "data.m"');
+    });
+
+    test('should accept a path-bearing remaining-accounts ref whose root is a virtual argument', () => {
+        const virtualNestedIx = instructionNode({
+            arguments: [instructionArgumentNode({ name: 'amount', type: numberTypeNode('u64') })],
+            name: 'virtualNested',
+            remainingAccounts: [
+                instructionRemainingAccountsNode(argumentValueNode('groups', ['signers']), {
+                    isOptional: false,
+                    isSigner: true,
+                }),
+            ],
+        });
+        const validate = createArgumentsInputValidator(makeRoot(virtualNestedIx), virtualNestedIx);
+        expect(() => validate({ amount: 100n, groups: { signers: [ADDR_1] } })).not.toThrow();
+    });
+
+    test('should accept a path-less remaining-accounts ref that names a declared argument', () => {
+        const declaredIx = instructionNode({
+            arguments: [
+                instructionArgumentNode({
+                    name: 'multiSigners',
+                    type: arrayTypeNode(publicKeyTypeNode(), remainderCountNode()),
+                }),
+            ],
+            name: 'declaredMultiSig',
+            remainingAccounts: [
+                instructionRemainingAccountsNode(argumentValueNode('multiSigners'), {
+                    isOptional: false,
+                    isSigner: true,
+                }),
+            ],
+        });
+        const validate = createArgumentsInputValidator(makeRoot(declaredIx), declaredIx);
+        expect(() => validate({ multiSigners: [ADDR_1, ADDR_2] })).not.toThrow();
     });
 
     test('should not encode remaining account args as instruction data', () => {

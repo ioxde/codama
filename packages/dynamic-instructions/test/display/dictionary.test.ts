@@ -1,16 +1,21 @@
 import type { EncodedAccount, MaybeEncodedAccount } from '@solana/accounts';
 import type { Address } from '@solana/addresses';
+import { AccountRole } from '@solana/instructions';
 import {
     accountFieldValueNode,
     accountLinkNode,
     amountNumberDisplayNode,
+    type CamelCaseString,
     injectedValueNode,
     instructionAccountNode,
     instructionArgumentNode,
+    instructionDisplayNode,
     instructionNode,
     numberTypeNode,
     numberValueNode,
     providedNode,
+    structFieldTypeNode,
+    structTypeNode,
 } from 'codama';
 import { describe, expect, test, vi } from 'vitest';
 
@@ -76,6 +81,58 @@ describe('getRequiredAccountsForDisplay', () => {
         const addresses = getRequiredAccountsForDisplay(root, parsed);
 
         // Then the mint address is required.
+        expect(addresses).toEqual([MINT]);
+    });
+
+    test('it matches a required account whose parsed name is not normalised', () => {
+        // Given a parsed instruction carrying a `Mint`-cased account name.
+        const instruction = instructionNode({
+            accounts: [mintInstructionAccount()],
+            arguments: [amountArgument()],
+            name: 'transfer',
+            provides: [providedNode('decimals', accountFieldValueNode({ account: 'mint', path: 'decimals' }))],
+        });
+        const root = makeRoot([instruction]);
+        const base = makeParsedInstruction(root, instruction, { amount: 1n });
+        const parsed = {
+            ...base,
+            accounts: [{ address: MINT, name: 'Mint' as CamelCaseString, role: AccountRole.READONLY }],
+        };
+
+        const addresses = getRequiredAccountsForDisplay(root, parsed);
+
+        // Then the lookup matches through camelCase.
+        expect(addresses).toEqual([MINT]);
+    });
+
+    test('it returns the address backing a nested amount addressed by the intent template', () => {
+        // Given an injecting amount in a non-flattened struct, surfaced only by the intent template dotting into it.
+        const instruction = instructionNode({
+            accounts: [mintInstructionAccount()],
+            arguments: [
+                instructionArgumentNode({
+                    name: 'order',
+                    type: structTypeNode([
+                        structFieldTypeNode({
+                            name: 'amount',
+                            type: numberTypeNode('u64', 'le', {
+                                display: amountNumberDisplayNode({ decimals: injectedValueNode({ key: 'decimals' }) }),
+                            }),
+                        }),
+                    ]),
+                }),
+            ],
+            display: instructionDisplayNode({ interpolatedIntent: 'Pay ${data.order.amount}' }),
+            name: 'transfer',
+            provides: [providedNode('decimals', accountFieldValueNode({ account: 'mint', path: 'decimals' }))],
+        });
+        const root = makeRoot([instruction]);
+        const parsed = makeParsedInstruction(root, instruction, { order: { amount: 1n } }, new Map([['mint', MINT]]));
+
+        // When we compute the required accounts.
+        const addresses = getRequiredAccountsForDisplay(root, parsed);
+
+        // Then the mint address is required: the sentence needs its decimals.
         expect(addresses).toEqual([MINT]);
     });
 

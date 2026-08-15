@@ -11,5 +11,7 @@ export {
     type ConstantPdaSeedValueVisitorContext,
     type PdaSeedValueVisitorContext,
 } from './pda-seed-value';
+// ioxde fork: exported so @codama/dynamic-instructions reads a nested reference the same way.
+export { formatArgumentPathSuffix, tryResolveArgumentPathValue } from './resolve-argument-path';
 export { createValueNodeVisitor } from './value-node-value';
 export { createCodecInputTransformer, createCodecInputTransformerVisitor } from './codec-input-transformer';

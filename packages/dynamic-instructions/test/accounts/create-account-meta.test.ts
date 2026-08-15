@@ -3,6 +3,7 @@ import { AccountRole } from '@solana/instructions';
 import type { InstructionNode } from 'codama';
 import {
     argumentValueNode,
+    arrayTypeNode,
     identityValueNode,
     instructionAccountNode,
     instructionArgumentNode,
@@ -13,7 +14,10 @@ import {
     programNode,
     publicKeyTypeNode,
     publicKeyValueNode,
+    remainderCountNode,
     rootNode,
+    structFieldTypeNode,
+    structTypeNode,
 } from 'codama';
 import { describe, expect, test } from 'vitest';
 
@@ -88,6 +92,33 @@ const initMintIx = instructionNode({
     name: 'initializeMint',
 });
 const initMintRoot = makeRoot(initMintIx);
+
+// A remaining-accounts group rooted in a declared struct argument: `data.signers`, not a virtual `signers`.
+function nestedMultisigInstruction(isOptional: boolean): InstructionNode {
+    return instructionNode({
+        accounts: [instructionAccountNode({ isSigner: false, isWritable: true, name: 'multisig' })],
+        arguments: [
+            instructionArgumentNode({
+                name: 'data',
+                type: structTypeNode([
+                    structFieldTypeNode({ name: 'm', type: numberTypeNode('u8') }),
+                    structFieldTypeNode({
+                        name: 'signers',
+                        type: arrayTypeNode(publicKeyTypeNode(), remainderCountNode()),
+                    }),
+                ]),
+            }),
+        ],
+        name: 'initializeNestedMultisig',
+        remainingAccounts: [
+            instructionRemainingAccountsNode(argumentValueNode('data', ['signers']), { isOptional, isSigner: false }),
+        ],
+    });
+}
+const nestedMultisigIx = nestedMultisigInstruction(false);
+const nestedMultisigRoot = makeRoot(nestedMultisigIx);
+const optionalNestedIx = nestedMultisigInstruction(true);
+const optionalNestedRoot = makeRoot(optionalNestedIx);
 
 describe('createAccountMeta: remaining accounts', () => {
     test('should append remaining accounts from argumentsInput', async () => {
@@ -195,6 +226,39 @@ describe('createAccountMeta: remaining accounts', () => {
                 { multisig: MULTISIG_ADDR },
             ),
         ).rejects.toThrow(/Missing argument \[signers\]/);
+    });
+
+    test('should read remaining accounts from a nested field of a struct argument', async () => {
+        const result = await createAccountMeta(
+            nestedMultisigRoot,
+            nestedMultisigIx,
+            { data: { m: 2, signers: [ADDR_1, ADDR_2] } },
+            { multisig: MULTISIG_ADDR },
+        );
+
+        // 1 regular account (multisig) + 2 remaining accounts.
+        expect(result).toHaveLength(3);
+        expect(result.slice(1)).toEqual([
+            { address: ADDR_1, role: AccountRole.READONLY },
+            { address: ADDR_2, role: AccountRole.READONLY },
+        ]);
+    });
+
+    test('should report the dotted reference when a required nested remaining account field is missing', async () => {
+        await expect(
+            createAccountMeta(nestedMultisigRoot, nestedMultisigIx, { data: { m: 2 } }, { multisig: MULTISIG_ADDR }),
+        ).rejects.toThrow(/Missing argument \[data.signers\]/);
+    });
+
+    test('should skip an optional nested remaining account field that is absent', async () => {
+        const result = await createAccountMeta(
+            optionalNestedRoot,
+            optionalNestedIx,
+            { data: { m: 2 } },
+            { multisig: MULTISIG_ADDR },
+        );
+
+        expect(result).toHaveLength(1);
     });
 });
 

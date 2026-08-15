@@ -1,5 +1,6 @@
+import { tryResolveArgumentPathValue } from '@codama/dynamic-address-resolution';
 import type { Address } from '@solana/addresses';
-import { isNode, type Node } from 'codama';
+import { camelCase, isNode, type Node } from 'codama';
 
 import { resolveInjectionTarget } from './resolve-injection-target';
 import type { DisplayContext } from './types';
@@ -21,7 +22,9 @@ export type ResolvedDisplayValue = Address | bigint | number | string | null;
  * - `injectedValueNode`: selected to its terminal node via {@link resolveInjectionTarget} (a
  *   matching provider wins, else the injection's own `fallback`) before being evaluated. The
  *   selection is cycle-safe, so a cyclic provider chain resolves to `null` rather than overflowing.
- * - `argumentValueNode`: the decoded value of the referenced instruction argument.
+ * - `argumentValueNode`: the decoded value of the referenced instruction argument. A `path` narrows
+ *   the reference to a field below it (`planData.planId`, or `tiers.1` for an index); an unresolved
+ *   path yields `null` rather than throwing, as does a reference to a whole struct.
  * - `accountValueNode`: the referenced account's address.
  * - `accountFieldValueNode`: a field of the referenced account's data — the account is fetched via
  *   `fetchAccount`, then its bytes decoded against the account's `accountLink` via
@@ -50,7 +53,11 @@ export async function resolveInjectedValue(
 
     if (isNode(node, 'argumentValueNode')) {
         const data = context.parsedInstruction.data as Record<string, unknown>;
-        return toResolvedValue(data[node.name]);
+        const rootValue = data[node.name];
+        // ioxde fork: honour the node's `path`. The lenient walk is right here — the display
+        // contract is to degrade to `null` rather than throw.
+        const value = node.path?.length ? tryResolveArgumentPathValue(rootValue, node.path) : rootValue;
+        return toResolvedValue(value);
     }
 
     if (isNode(node, 'accountValueNode')) {
@@ -71,7 +78,10 @@ export async function resolveInjectedValue(
 
 /** Finds the concrete address of a named account of the surrounding instruction, or `null`. */
 function findAccountAddress(context: Omit<DisplayContext, 'consumedMemberNames'>, name: string): Address | null {
-    return context.parsedInstruction.accounts.find(account => account.name === name)?.address ?? null;
+    // Compare through camelCase: `createFromJson` does no normalisation, so a `Mint`-named account
+    // would silently never match its `mint` node.
+    const target = camelCase(name);
+    return context.parsedInstruction.accounts.find(account => camelCase(account.name) === target)?.address ?? null;
 }
 
 /**

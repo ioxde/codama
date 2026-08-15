@@ -43,20 +43,7 @@ function generateTypeBlockForInstruction(ix: InstructionNode, definedTypes: Defi
     let output = '';
 
     if (refs.argsRef) {
-        const args = (ix.arguments ?? []).filter(arg => arg.defaultValueStrategy !== 'omitted');
-        const remainingAccountArgs = (ix.remainingAccounts ?? []).filter(ra => ra.value.kind === 'argumentValueNode');
-        output += `export type ${refs.argsRef} = {\n`;
-        for (const arg of args) {
-            const tsType = codamaTypeToTS(arg.type, definedTypes);
-            const isOptional = OPTIONAL_NODE_KINDS.includes(arg.type.kind);
-            const sep = isOptional ? '?:' : ':';
-            output += `    ${arg.name}${sep} ${tsType};\n`;
-        }
-        for (const ra of remainingAccountArgs) {
-            const sep = ra.isOptional ? '?:' : ':';
-            output += `    ${ra.value.name}${sep} Address[];\n`;
-        }
-        output += '};\n\n';
+        output += generateArgsBlock(refs.argsRef, ix, definedTypes);
     }
 
     if ((ix.accounts ?? []).length > 0) {
@@ -84,4 +71,92 @@ function generateTypeBlockForInstruction(ix: InstructionNode, definedTypes: Defi
     }
 
     return output;
+}
+
+function generateArgsBlock(argsRef: string, ix: InstructionNode, definedTypes: DefinedTypeNode[]): string {
+    const args = (ix.arguments ?? []).filter(arg => arg.defaultValueStrategy !== 'omitted');
+    // extraArguments are always optional: only required when the account they derive is not passed
+    // directly, which this type cannot see. Must match the args validator.
+    const extraArguments = ix.extraArguments ?? [];
+    const emitted = new Set<string>([...args, ...extraArguments].map(arg => arg.name));
+
+    let output = `export type ${argsRef} = {\n`;
+    for (const arg of args) {
+        const tsType = codamaTypeToTS(arg.type, definedTypes);
+        const isOptional = OPTIONAL_NODE_KINDS.includes(arg.type.kind);
+        const sep = isOptional ? '?:' : ':';
+        output += `    ${arg.name}${sep} ${tsType};\n`;
+    }
+    for (const arg of extraArguments) {
+        output += `    ${arg.name}?: ${codamaTypeToTS(arg.type, definedTypes)};\n`;
+    }
+    output += generateRemainingAccountKeys(ix, emitted);
+    output += '};\n\n';
+    return output;
+}
+
+type VirtualRootLeaf = { optional: boolean; path: readonly string[] };
+
+// Only roots absent from both `arguments` and `extraArguments` may contribute a key; re-emitting a
+// declared root duplicates it and the generated type stops compiling. A declared root's requiredness
+// comes from its serialized type, not the group's `isOptional`.
+function generateRemainingAccountKeys(ix: InstructionNode, emitted: ReadonlySet<string>): string {
+    const roots = new Map<string, VirtualRootLeaf[]>();
+    for (const ra of ix.remainingAccounts ?? []) {
+        if (ra.value.kind !== 'argumentValueNode' || emitted.has(ra.value.name)) continue;
+        const leaves = roots.get(ra.value.name) ?? [];
+        leaves.push({ optional: Boolean(ra.isOptional), path: ra.value.path ?? [] });
+        roots.set(ra.value.name, leaves);
+    }
+
+    let output = '';
+    for (const [name, leaves] of roots) {
+        const sep = leaves.every(leaf => leaf.optional) ? '?:' : ':';
+        output += `    ${name}${sep} ${virtualRootType(leaves)};\n`;
+    }
+    return output;
+}
+
+// A node addressed both as a leaf (`['x']`) and as a container (`['x', 'y']`) renders as an intersection:
+// the runtime resolves every group's path independently and requires `Address[]` at each leaf.
+function virtualRootType(leaves: VirtualRootLeaf[]): string {
+    const nested = leaves.filter(leaf => leaf.path.length > 0);
+    if (nested.length === 0) return 'Address[]';
+    const treeType = renderPathTree(buildPathTree(nested));
+    return nested.length < leaves.length ? `Address[] & ${treeType}` : treeType;
+}
+
+type PathTree = Map<string, { children: PathTree | null; optional: boolean; terminal: boolean }>;
+
+function buildPathTree(leaves: VirtualRootLeaf[]): PathTree {
+    const root: PathTree = new Map();
+    for (const leaf of leaves) {
+        let tree = root;
+        for (let index = 0; index < leaf.path.length; index++) {
+            const segment = leaf.path[index];
+            const isLast = index === leaf.path.length - 1;
+            let entry = tree.get(segment);
+            if (!entry) {
+                entry = { children: null, optional: leaf.optional, terminal: false };
+                tree.set(segment, entry);
+            }
+            entry.optional = entry.optional && leaf.optional;
+            if (isLast) {
+                entry.terminal = true;
+            } else {
+                entry.children ??= new Map();
+                tree = entry.children;
+            }
+        }
+    }
+    return root;
+}
+
+function renderPathTree(tree: PathTree): string {
+    const fields = [...tree].map(([name, entry]) => {
+        const nested = entry.children === null ? null : renderPathTree(entry.children);
+        const type = nested === null ? 'Address[]' : entry.terminal ? `Address[] & ${nested}` : nested;
+        return `${name}${entry.optional ? '?' : ''}: ${type}`;
+    });
+    return `{ ${fields.join('; ')} }`;
 }

@@ -58,7 +58,10 @@ export function unwrapTupleEnumWithSingleStructVisitor(enumsOrVariantsToUnwrap: 
                         }
                         if (!isNode(item, 'structTypeNode')) return node;
                         const nestedStruct = transformNestedTypeNode(node.tuple, () => item as StructTypeNode);
-                        return enumStructVariantTypeNode(node.name, nestedStruct);
+                        // Carry `discriminator` and `display` through; dropping the discriminator changes the wire value.
+                        return enumStructVariantTypeNode(node.name, nestedStruct, node.discriminator, {
+                            display: node.display,
+                        });
                     },
                 },
             ]),

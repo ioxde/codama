@@ -10,7 +10,7 @@ import { isNode } from 'codama';
 
 import { isObjectRecord, safeStringify } from '../shared/util';
 
-// ioxde fork: backs the optional `path` on ArgumentValueNode, used by PDA seeds, account defaults and conditions.
+// ioxde fork: backs the optional `path` on ArgumentValueNode.
 
 /**
  * Format a path array as the `argumentPath` suffix expected by ARGUMENT_MISSING error context.
@@ -87,15 +87,22 @@ type ArgumentPathWalk =
     | { readonly kind: 'missing'; readonly visited: readonly CamelCaseString[] }
     | { readonly kind: 'resolved'; readonly value: unknown };
 
-/**
- * Walks `path` through an argument value, descending into struct fields by name and tuple/array
- * items by numeric index. Returns a result instead of throwing so both resolvers below share one
- * copy of the descent logic.
- */
+// A Kit `Option` wrapper is a codec artefact, so paths never contain a `value` segment: unwrap before
+// every descent and at the leaf, or seed encoding receives `{ __option, value }`. `None` reads as
+// absent. Keep in sync with the display layer's `unwrapOptionValue`.
+function unwrapOptionWrappers(value: unknown): unknown {
+    while (isObjectRecord(value) && typeof value.__option === 'string') {
+        if (value.__option === 'None') return undefined;
+        value = value.value;
+    }
+    return value;
+}
+
 function walkArgumentPathValue(rootValue: unknown, path: readonly CamelCaseString[]): ArgumentPathWalk {
     let current = rootValue;
     const visited: CamelCaseString[] = [];
     for (const segment of path) {
+        current = unwrapOptionWrappers(current);
         if (current === undefined || current === null) {
             return { kind: 'missing', visited: [...visited] };
         }
@@ -112,7 +119,7 @@ function walkArgumentPathValue(rootValue: unknown, path: readonly CamelCaseStrin
         }
         visited.push(segment);
     }
-    return { kind: 'resolved', value: current };
+    return { kind: 'resolved', value: unwrapOptionWrappers(current) };
 }
 
 /**
@@ -140,21 +147,28 @@ export function resolveArgumentPathValue(
     if (walk.kind === 'outOfBounds') {
         throw new CodamaError(CODAMA_ERROR__DYNAMIC_CLIENT__INVALID_ARGUMENT_INPUT, {
             argumentName,
-            expectedType: `an array with index ${walk.index} at "${argumentName}${pathSuffix(walk.visited)}"`,
+            argumentPath: pathSuffix(walk.visited),
+            expectedType: `an array with index ${walk.index}`,
             value: safeStringify(walk.array),
         });
     }
     throw new CodamaError(CODAMA_ERROR__DYNAMIC_CLIENT__INVALID_ARGUMENT_INPUT, {
         argumentName,
-        expectedType: `an object or array at "${argumentName}${pathSuffix(walk.visited)}" to read "${walk.segment}"`,
+        argumentPath: pathSuffix(walk.visited),
+        expectedType: `an object or array to read "${walk.segment}"`,
         value: safeStringify(walk.value),
     });
 }
 
 /**
- * Lenient counterpart to {@link resolveArgumentPathValue}, for cases where a non-resolved value is
- * "not present" rather than an error (e.g. a conditional's condition). Returns `undefined` for any
- * path that doesn't fully resolve; never throws.
+ * Lenient counterpart to {@link resolveArgumentPathValue}: returns `undefined` — never throws — for
+ * any path that does not fully resolve, including a `None` along the way.
+ *
+ * @example
+ * ```ts
+ * // Array items are addressed by index, as a string segment like any other.
+ * tryResolveArgumentPathValue({ tiers: [6, 9] }, ['tiers', '1'] as CamelCaseString[]); // 9
+ * ```
  */
 export function tryResolveArgumentPathValue(rootValue: unknown, path: readonly CamelCaseString[]): unknown {
     const walk = walkArgumentPathValue(rootValue, path);

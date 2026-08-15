@@ -29,11 +29,12 @@ export function renameEnumNode(node: EnumTypeNode, map: Record<string, string>):
 }
 
 function renameEnumVariant(variant: EnumVariantTypeNode, newName: string) {
+    // Carry `discriminator` and `display` through; dropping the discriminator changes the variant's wire value.
     if (isNode(variant, 'enumStructVariantTypeNode')) {
-        return enumStructVariantTypeNode(newName, variant.struct);
+        return enumStructVariantTypeNode(newName, variant.struct, variant.discriminator, { display: variant.display });
     }
     if (isNode(variant, 'enumTupleVariantTypeNode')) {
-        return enumTupleVariantTypeNode(newName, variant.tuple);
+        return enumTupleVariantTypeNode(newName, variant.tuple, variant.discriminator, { display: variant.display });
     }
-    return enumEmptyVariantTypeNode(newName);
+    return enumEmptyVariantTypeNode(newName, variant.discriminator, { display: variant.display });
 }

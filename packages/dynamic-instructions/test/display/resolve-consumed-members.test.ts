@@ -3,11 +3,14 @@ import {
     accountFieldValueNode,
     accountValueNode,
     amountNumberDisplayNode,
+    argumentValueNode,
     injectedValueNode,
     instructionArgumentNode,
+    instructionDisplayNode,
     instructionNode,
     numberTypeNode,
     numberValueNode,
+    optionTypeNode,
     providedNode,
     stringValueNode,
     structFieldDisplayNode,
@@ -178,6 +181,80 @@ describe('resolveConsumedMemberNames', () => {
         expect(consumed).toEqual(new Set());
     });
 
+    test('it marks an account consumed by a nested amount addressed by the intent template', async () => {
+        // Given a nested amount in a non-flattened struct, surfaced only by the intent template dotting into it.
+        const instruction = instructionNode({
+            accounts: [],
+            arguments: [
+                instructionArgumentNode({
+                    name: 'order',
+                    type: structTypeNode([
+                        structFieldTypeNode({
+                            name: 'amount',
+                            type: numberTypeNode('u64', 'le', {
+                                display: amountNumberDisplayNode({ decimals: injectedValueNode({ key: 'decimals' }) }),
+                            }),
+                        }),
+                    ]),
+                }),
+            ],
+            display: instructionDisplayNode({ interpolatedIntent: 'Pay ${data.order.amount}' }),
+            name: 'transfer',
+            provides: [providedNode('decimals', accountFieldValueNode({ account: 'mint', path: 'decimals' }))],
+        });
+
+        // When we resolve the consumed members, with the mint fully fetchable.
+        const mint = accountFixture(mintAccountNode(), { decimals: 6 });
+        const consumed = await resolveConsumedMemberNames(
+            displayContext({
+                fetchAccount: mockFetch([[MINT, mint.encoded]]),
+                parsedInstruction: parsedInstruction({ accounts: [['mint', MINT]], instruction }),
+                provides: new Map(instruction.provides?.map(p => [p.name, p]) ?? []),
+                resolveAccountData: mint.resolveAccountData,
+            }),
+        );
+
+        // Then the mint is consumed: its decimals back the amount the sentence displays.
+        expect(consumed).toEqual(new Set(['mint']));
+    });
+
+    test('it does not mark an account consumed by a template-addressed amount when the template is malformed', async () => {
+        // Given an intent template dotting into the nested amount, but carrying a dangling opener.
+        const instruction = instructionNode({
+            accounts: [],
+            arguments: [
+                instructionArgumentNode({
+                    name: 'order',
+                    type: structTypeNode([
+                        structFieldTypeNode({
+                            name: 'amount',
+                            type: numberTypeNode('u64', 'le', {
+                                display: amountNumberDisplayNode({ decimals: injectedValueNode({ key: 'decimals' }) }),
+                            }),
+                        }),
+                    ]),
+                }),
+            ],
+            display: instructionDisplayNode({ interpolatedIntent: 'Pay ${data.order.amount} to ${broken' }),
+            name: 'transfer',
+            provides: [providedNode('decimals', accountFieldValueNode({ account: 'mint', path: 'decimals' }))],
+        });
+
+        // When we resolve the consumed members, with the mint fully fetchable.
+        const mint = accountFixture(mintAccountNode(), { decimals: 6 });
+        const consumed = await resolveConsumedMemberNames(
+            displayContext({
+                fetchAccount: mockFetch([[MINT, mint.encoded]]),
+                parsedInstruction: parsedInstruction({ accounts: [['mint', MINT]], instruction }),
+                provides: new Map(instruction.provides?.map(p => [p.name, p]) ?? []),
+                resolveAccountData: mint.resolveAccountData,
+            }),
+        );
+
+        // Then the mint stays visible: the sentence is dropped, so its decimals never display.
+        expect(consumed).toEqual(new Set());
+    });
+
     test('it returns an empty set when no display value injects anything', async () => {
         // Given an amount that uses literal decimals (no injection).
         const instruction = instructionNode({
@@ -200,6 +277,81 @@ describe('resolveConsumedMemberNames', () => {
 
         // Then nothing is consumed.
         expect(consumed).toEqual(new Set());
+    });
+
+    test('it marks a top-level argument consumed by its plain name', async () => {
+        // Given `decimals` provided by a path-less argument reference.
+        const instruction = instructionNode({
+            accounts: [],
+            arguments: [amountArgument(), instructionArgumentNode({ name: 'decimals', type: numberTypeNode('u8') })],
+            name: 'transfer',
+            provides: [providedNode('decimals', argumentValueNode('decimals'))],
+        });
+
+        const consumed = await resolveConsumedMemberNames(
+            displayContext({
+                parsedInstruction: parsedInstruction({ data: { decimals: 6 }, instruction }),
+                provides: new Map(instruction.provides?.map(p => [p.name, p]) ?? []),
+            }),
+        );
+        expect(consumed).toEqual(new Set(['decimals']));
+    });
+
+    test('it marks a nested argument field consumed by its dotted reference, not its root', async () => {
+        // Given `decimals` provided by a reference to a field of the `planData` struct.
+        const instruction = instructionNode({
+            accounts: [],
+            arguments: [
+                amountArgument(),
+                instructionArgumentNode({
+                    name: 'planData',
+                    type: structTypeNode([structFieldTypeNode({ name: 'decimals', type: numberTypeNode('u8') })]),
+                }),
+            ],
+            name: 'transfer',
+            provides: [providedNode('decimals', argumentValueNode('planData', ['decimals']))],
+        });
+
+        const consumed = await resolveConsumedMemberNames(
+            displayContext({
+                parsedInstruction: parsedInstruction({ data: { planData: { decimals: 6 } }, instruction }),
+                provides: new Map(instruction.provides?.map(p => [p.name, p]) ?? []),
+            }),
+        );
+
+        // Then only the nested field is consumed — the root struct still has unsurfaced siblings.
+        expect(consumed).toEqual(new Set(['planData.decimals']));
+    });
+
+    test('it marks a nested field of an option-wrapped struct argument consumed', async () => {
+        // Given a path into a struct argument decoded as `Option<Struct>`.
+        const instruction = instructionNode({
+            accounts: [],
+            arguments: [
+                amountArgument(),
+                instructionArgumentNode({
+                    name: 'planData',
+                    type: optionTypeNode(
+                        structTypeNode([structFieldTypeNode({ name: 'decimals', type: numberTypeNode('u8') })]),
+                    ),
+                }),
+            ],
+            name: 'transfer',
+            provides: [providedNode('decimals', argumentValueNode('planData', ['decimals']))],
+        });
+
+        const consumed = await resolveConsumedMemberNames(
+            displayContext({
+                parsedInstruction: parsedInstruction({
+                    data: { planData: { __option: 'Some', value: { decimals: 6 } } },
+                    instruction,
+                }),
+                provides: new Map(instruction.provides?.map(p => [p.name, p]) ?? []),
+            }),
+        );
+
+        // Then the injection resolves through the option wrapper and consumes the nested field.
+        expect(consumed).toEqual(new Set(['planData.decimals']));
     });
 
     test('it marks an account consumed through an injection fallback', async () => {

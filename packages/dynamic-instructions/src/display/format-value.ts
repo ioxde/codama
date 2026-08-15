@@ -61,22 +61,24 @@ export function formatDurationValue(value: bigint | number, node: DurationNumber
 }
 
 /**
- * Presents a string by slicing it to the `[sliceStart, sliceEnd)` range of decoded characters.
- * Both bounds are optional and default to the start and end of the string respectively.
+ * Presents a string sliced to the optional `[sliceStart, sliceEnd)` range. Bounds count Unicode code
+ * points, not UTF-16 code units — `String.prototype.slice` splits a surrogate pair at the boundary.
  */
 export function formatStringValue(value: string, node: StringDisplayNode): string {
     if (node.sliceStart === undefined && node.sliceEnd === undefined) return value;
-    return value.slice(node.sliceStart ?? 0, node.sliceEnd);
+    return [...value].slice(node.sliceStart ?? 0, node.sliceEnd).join('');
 }
 
 /**
- * Divides an integer value by `10 ^ decimals`, trimming trailing zeros from the fractional part.
- * Returns `null` for a non-integer value (which cannot be scaled as a fixed-point integer) or for
- * negative decimals (which cannot describe a fixed-point scale).
+ * `decimals` resolves from attacker-controllable account state, and unbounded values overflow
+ * `padStart` into a thrown `RangeError` that kills the whole display. 30 is far above any real asset.
  */
+const MAX_AMOUNT_DECIMALS = 30;
+
+/** Divides an integer value by `10 ^ decimals`, trimming trailing zeros from the fractional part. */
 function scaleByDecimals(value: bigint | number, decimals: number): string | null {
     if (typeof value === 'number' && !Number.isInteger(value)) return null;
-    if (!Number.isInteger(decimals) || decimals < 0) return null;
+    if (!Number.isInteger(decimals) || decimals < 0 || decimals > MAX_AMOUNT_DECIMALS) return null;
     if (decimals === 0) return value.toString();
 
     const negative = value < 0;
